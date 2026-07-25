@@ -81,7 +81,7 @@ export default function LoginPage() {
           </div>
 
           <Link
-            href="/"
+            href="/dashboard"
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-(--radius-control) bg-accent-deep text-sm font-semibold text-[#03150e] shadow-[0_0_24px_rgb(16_185_129/0.3)] transition-colors hover:bg-accent"
           >
             Entrar en modo demo

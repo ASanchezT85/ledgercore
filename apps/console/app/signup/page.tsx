@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { BrandLockup } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
+import { LanguageProvider, LangToggle, useLang } from "@/components/language";
+import type { Dictionary } from "@/lib/i18n";
 
 type SignupResult = {
   tenant_id: string;
@@ -23,20 +25,20 @@ type SignupResult = {
   expires_at: string;
 };
 
-function curlSnippet(apiKey: string): string {
+function curlSnippet(apiKey: string, c: Dictionary["signup"]["curlComments"]): string {
   const base =
     typeof window !== "undefined" ? window.location.origin.replace(/:3000$/, ":8080") : "https://api.ledgercore.dev";
-  return `# 1. Token de acceso (JWT de 15 min)
+  return `${c.step1}
 TOKEN=$(curl -s ${base}/v1/auth/token \\
   -H 'Content-Type: application/json' \\
   -d '{"api_key":"${apiKey}"}' | jq -r .access_token)
 AUTH="Authorization: Bearer $TOKEN"; CT='Content-Type: application/json'
 
-# 2. Crear un ledger
+${c.step2}
 LEDGER=$(curl -s ${base}/v1/ledgers -H "$AUTH" -H "$CT" \\
   -d '{"name":"main"}' | jq -r .id)
 
-# 3. Tres cuentas: caja (activo), wallet del cliente y comisiones
+${c.step3}
 CASH=$(curl -s ${base}/v1/accounts -H "$AUTH" -H "$CT" -d "{\\"ledger_id\\":\\"$LEDGER\\",
   \\"name\\":\\"assets:cash\\",\\"type\\":\\"asset\\",\\"normal_balance\\":\\"DEBIT\\"}" | jq -r .id)
 WALLET=$(curl -s ${base}/v1/accounts -H "$AUTH" -H "$CT" -d "{\\"ledger_id\\":\\"$LEDGER\\",
@@ -44,7 +46,7 @@ WALLET=$(curl -s ${base}/v1/accounts -H "$AUTH" -H "$CT" -d "{\\"ledger_id\\":\\
 FEES=$(curl -s ${base}/v1/accounts -H "$AUTH" -H "$CT" -d "{\\"ledger_id\\":\\"$LEDGER\\",
   \\"name\\":\\"revenue:fees\\",\\"type\\":\\"revenue\\",\\"normal_balance\\":\\"CREDIT\\"}" | jq -r .id)
 
-# 4. Deposito de 100.00 USD (10000 centavos): 9700 al wallet + 300 de fee
+${c.step4}
 curl -s ${base}/v1/transactions -H "$AUTH" -H "$CT" \\
   -H 'Idempotency-Key: demo-deposit-1' \\
   -d "{\\"ledger_id\\":\\"$LEDGER\\",\\"description\\":\\"first deposit\\",\\"status\\":\\"posted\\",
@@ -54,19 +56,30 @@ curl -s ${base}/v1/transactions -H "$AUTH" -H "$CT" \\
       {\\"account_id\\":\\"$FEES\\",\\"direction\\":\\"CREDIT\\",\\"amount\\":{\\"asset\\":\\"USD\\",\\"amount\\":\\"300\\"}}]}"`;
 }
 
-export default function SignupPage() {
+function SignupContent() {
+  const { t, lang } = useLang();
+  const s = t.signup;
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorKey, setErrorKey] = useState<string | null>(null);
   const [result, setResult] = useState<SignupResult | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
 
+  const errorText = (key: string): string => {
+    const messages: Record<string, string> = {
+      email_taken: s.errEmailTaken,
+      signup_limit_reached: s.errLimit,
+      network: s.errNetwork,
+    };
+    return messages[key] ?? key;
+  };
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError(null);
+    setErrorKey(null);
     try {
       const res = await fetch("/api/signup", {
         method: "POST",
@@ -75,18 +88,18 @@ export default function SignupPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        const messages: Record<string, string> = {
-          email_taken: "Ese correo ya creó un tenant sandbox.",
-          signup_limit_reached:
-            "Se alcanzó el límite diario de registros. Intenta mañana.",
-          validation_error: data.message ?? "Datos inválidos.",
-        };
-        setError(messages[data.error] ?? data.message ?? "No se pudo crear el sandbox.");
+        if (data.error === "email_taken" || data.error === "signup_limit_reached") {
+          setErrorKey(data.error);
+        } else if (data.error === "validation_error") {
+          setErrorKey(data.message ?? s.errInvalid);
+        } else {
+          setErrorKey(data.message ?? s.errGeneric);
+        }
         return;
       }
       setResult(data as SignupResult);
     } catch {
-      setError("No se pudo contactar la API. Intenta de nuevo.");
+      setErrorKey("network");
     } finally {
       setBusy(false);
     }
@@ -107,26 +120,25 @@ export default function SignupPage() {
       <div className={result ? "w-full max-w-2xl" : "w-full max-w-sm"}>
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <BrandLockup size={40} />
-          <p className="text-sm text-ink-faint">
-            Sandbox gratuito · ledger de doble partida como servicio
-          </p>
+          <p className="text-sm text-ink-faint">{s.tagline}</p>
+          <LangToggle />
         </div>
 
         <div className="rounded-(--radius-card) border border-edge bg-surface/80 p-6 shadow-[0_1px_0_rgb(255_255_255/0.04)_inset,0_16px_48px_rgb(2_6_12/0.6)] backdrop-blur-md">
           {!result ? (
             <>
               <div className="mb-5 flex items-center justify-between">
-                <h1 className="text-sm font-semibold text-ink">Crear sandbox</h1>
+                <h1 className="text-sm font-semibold text-ink">{s.createTitle}</h1>
                 <Badge tone="sky" className="gap-1">
                   <Sparkles size={11} aria-hidden="true" />
-                  14 días
+                  {s.days}
                 </Badge>
               </div>
 
               <form onSubmit={submit} className="space-y-3">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-ink-muted">
-                    Correo de trabajo
+                    {s.emailLabel}
                   </span>
                   <span className="flex items-center gap-2 rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2.5">
                     <Mail size={14} className="text-ink-faint" aria-hidden="true" />
@@ -135,7 +147,7 @@ export default function SignupPage() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@empresa.com"
+                      placeholder={s.emailPlaceholder}
                       className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
                     />
                   </span>
@@ -143,7 +155,7 @@ export default function SignupPage() {
 
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium text-ink-muted">
-                    Nombre de la empresa
+                    {s.companyLabel}
                   </span>
                   <span className="flex items-center gap-2 rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2.5">
                     <Building2 size={14} className="text-ink-faint" aria-hidden="true" />
@@ -153,16 +165,16 @@ export default function SignupPage() {
                       maxLength={255}
                       value={company}
                       onChange={(e) => setCompany(e.target.value)}
-                      placeholder="Acme Payments"
+                      placeholder={s.companyPlaceholder}
                       className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
                     />
                   </span>
                 </label>
 
-                {error ? (
+                {errorKey ? (
                   <p className="flex items-start gap-2 rounded-(--radius-control) border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
                     <ShieldAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                    {error}
+                    {errorText(errorKey)}
                   </p>
                 ) : null}
 
@@ -171,20 +183,19 @@ export default function SignupPage() {
                   disabled={busy}
                   className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-(--radius-control) bg-accent-deep text-sm font-semibold text-[#03150e] shadow-[0_0_24px_rgb(16_185_129/0.3)] transition-colors hover:bg-accent disabled:opacity-60"
                 >
-                  {busy ? "Creando sandbox…" : "Crear sandbox gratis"}
+                  {busy ? s.submitBusy : s.submit}
                   <ArrowRight size={15} aria-hidden="true" />
                 </button>
               </form>
 
               <p className="mt-4 text-center text-[11px] leading-relaxed text-ink-faint">
-                Un sandbox por correo. El tenant y todos sus datos se eliminan
-                automáticamente a los 14 días.
+                {s.footnote}
               </p>
             </>
           ) : (
             <>
               <div className="mb-5 flex items-center justify-between">
-                <h1 className="text-sm font-semibold text-ink">Sandbox listo</h1>
+                <h1 className="text-sm font-semibold text-ink">{s.readyTitle}</h1>
                 <Badge tone="emerald" className="gap-1">
                   <Check size={11} aria-hidden="true" />
                   {result.slug}
@@ -192,9 +203,9 @@ export default function SignupPage() {
               </div>
 
               <p className="mb-2 text-xs text-ink-muted">
-                Esta es tu API key. Se muestra{" "}
-                <span className="font-semibold text-ink">una sola vez</span>:
-                guárdala ahora.
+                {s.keyIntroPre}
+                <span className="font-semibold text-ink">{s.keyIntroStrong}</span>
+                {s.keyIntroPost}
               </p>
               <div className="mb-4 flex items-center gap-2 rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2.5">
                 <KeyRound size={14} className="shrink-0 text-ink-faint" aria-hidden="true" />
@@ -207,39 +218,39 @@ export default function SignupPage() {
                   className="inline-flex shrink-0 items-center gap-1 rounded-(--radius-control) border border-edge-strong px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-ink"
                 >
                   {copiedKey ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
-                  {copiedKey ? "Copiada" : "Copiar"}
+                  {copiedKey ? s.copied : s.copy}
                 </button>
               </div>
 
-              <p className="mb-2 text-xs text-ink-muted">
-                Flujo demo — token, ledger, cuentas y un depósito de 100.00 USD
-                (10000 → 9700 wallet + 300 fee):
-              </p>
+              <p className="mb-2 text-xs text-ink-muted">{s.demoIntro}</p>
               <div className="relative mb-4">
                 <pre className="max-h-72 overflow-auto rounded-(--radius-control) border border-edge-strong bg-surface-raised p-3 text-[11px] leading-relaxed text-ink-muted">
-                  {curlSnippet(result.api_key)}
+                  {curlSnippet(result.api_key, s.curlComments)}
                 </pre>
                 <button
                   type="button"
-                  onClick={() => copy(curlSnippet(result.api_key), setCopiedCurl)}
+                  onClick={() => copy(curlSnippet(result.api_key, s.curlComments), setCopiedCurl)}
                   className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-(--radius-control) border border-edge-strong bg-surface px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-ink"
                 >
                   {copiedCurl ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
-                  {copiedCurl ? "Copiado" : "Copiar"}
+                  {copiedCurl ? s.copiedCurl : s.copy}
                 </button>
               </div>
 
               <p className="mb-4 text-[11px] text-ink-faint">
-                Tenant <code className="text-ink-muted">{result.tenant_id}</code> · expira el{" "}
-                {new Date(result.expires_at).toLocaleDateString()}. Después de esa
-                fecha el tenant y sus datos se purgan automáticamente.
+                {s.tenantPre} <code className="text-ink-muted">{result.tenant_id}</code> ·{" "}
+                {s.expiresPre}{" "}
+                {new Date(result.expires_at).toLocaleDateString(
+                  lang === "es" ? "es" : "en-US",
+                )}
+                . {s.purgeNote}
               </p>
 
               <Link
-                href="/"
+                href="/dashboard"
                 className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-(--radius-control) bg-accent-deep text-sm font-semibold text-[#03150e] shadow-[0_0_24px_rgb(16_185_129/0.3)] transition-colors hover:bg-accent"
               >
-                Ir a la consola
+                {s.goConsole}
                 <ArrowRight size={15} aria-hidden="true" />
               </Link>
             </>
@@ -247,12 +258,20 @@ export default function SignupPage() {
         </div>
 
         <p className="mt-6 text-center text-[11px] text-ink-faint">
-          LedgerCore — infraestructura financiera ·{" "}
+          {s.footerBrand} ·{" "}
           <Link href="/login" className="underline decoration-edge underline-offset-2 hover:text-ink-muted">
-            ¿Ya tienes cuenta?
+            {s.haveAccount}
           </Link>
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <LanguageProvider>
+      <SignupContent />
+    </LanguageProvider>
   );
 }

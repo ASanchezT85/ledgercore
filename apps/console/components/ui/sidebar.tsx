@@ -14,7 +14,7 @@ import { BrandLockup } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/ledgers", label: "Ledgers", icon: BookOpenText },
   { href: "/transactions", label: "Transacciones", icon: ArrowLeftRight },
   { href: "/reconciliation", label: "Conciliación", icon: Scale },
@@ -27,7 +27,7 @@ export function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-edge bg-surface/60 backdrop-blur-md">
       <div className="flex items-center justify-between px-5 pt-5 pb-4">
-        <Link href="/" aria-label="LedgerCore — dashboard">
+        <Link href="/dashboard" aria-label="LedgerCore — dashboard">
           <BrandLockup />
         </Link>
       </div>
@@ -48,8 +48,7 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-0.5 px-3" aria-label="Principal">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = pathname.startsWith(href);
           return (
             <Link
               key={href}
