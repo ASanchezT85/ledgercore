@@ -48,6 +48,10 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, http.StatusNotFound, "not_found", "resource not found")
 	case errors.Is(err, domain.ErrSlugConflict):
 		httpx.WriteError(w, http.StatusConflict, "slug_conflict", "a tenant with that slug already exists")
+	case errors.Is(err, domain.ErrEmailTaken):
+		httpx.WriteError(w, http.StatusConflict, "email_taken", "that email already created a sandbox tenant")
+	case errors.Is(err, domain.ErrSignupLimitReached):
+		httpx.WriteError(w, http.StatusTooManyRequests, "signup_limit_reached", "the daily sandbox signup limit was reached; try again tomorrow")
 	case errors.Is(err, app.ErrInvalidCredentials):
 		httpx.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "api key is unknown, revoked, or its tenant is not active")
 	default:
@@ -160,6 +164,31 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// ---- Sandbox signup -----------------------------------------------------
+
+func (s *Server) handleSandboxSignup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email       string `json:"email"`
+		CompanyName string `json:"company_name"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	signup, err := s.sandbox.Signup(r.Context(), req.Email, req.CompanyName)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, map[string]any{
+		"tenant_id":  signup.Tenant.ID,
+		"slug":       signup.Tenant.Slug,
+		"api_key":    signup.Secret, // shown exactly once
+		"key_prefix": signup.Key.KeyPrefix,
+		"expires_at": signup.Tenant.ExpiresAt,
+	})
 }
 
 // ---- Auth -----------------------------------------------------

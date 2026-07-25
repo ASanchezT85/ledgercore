@@ -13,11 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go"
+
 	"github.com/ledgercore/ledgercore/libs/go/obs"
 	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/httpapi"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/natsconsumer"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/postgres"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/purge"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/config"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/dispatcher"
@@ -67,6 +70,32 @@ func run() error {
 	consumer := natsconsumer.New(cfg.NATSURL, svc)
 	consumer.Start(ctx)
 	defer consumer.Close()
+
+	// Sandbox TTL: purge this schema when identity announces an expired
+	// tenant. Own connection with background retry, mirroring the fan-out
+	// consumer's tolerance to a NATS outage at startup.
+	go func() {
+		for {
+			nc, err := nats.Connect(cfg.NATSURL,
+				nats.Name(serviceName+"-purge"),
+				nats.MaxReconnects(-1),
+				nats.ReconnectWait(2*time.Second),
+			)
+			if err == nil {
+				if _, err = purge.Start(ctx, nc, pool); err == nil {
+					return
+				}
+				nc.Close()
+			}
+			slog.Warn("webhooks purge consumer setup failed; retrying",
+				"url", cfg.NATSURL, "retry_in", "5s", "error", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}()
 
 	disp := dispatcher.New(repo)
 	go disp.Run(ctx)

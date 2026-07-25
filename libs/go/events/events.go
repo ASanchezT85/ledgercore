@@ -22,6 +22,9 @@ const (
 	TopicHoldCaptured        = "ledger.hold.captured"
 	TopicHoldReleased        = "ledger.hold.released"
 	TopicDiscrepancyDetected = "recon.discrepancy.detected"
+	// TopicTenantExpired announces that a sandbox tenant passed its TTL.
+	// Every service owning tenant data consumes it and purges its schema.
+	TopicTenantExpired = "identity.tenant.expired"
 )
 
 // EnvelopeVersion is the current envelope schema version.

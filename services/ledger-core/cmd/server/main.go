@@ -20,6 +20,7 @@ import (
 	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 
 	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/http"
+	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/natsconsumer"
 	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/outbox"
 	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/postgres"
 	"github.com/ledgercore/ledgercore/services/ledger-core/internal/app"
@@ -38,6 +39,7 @@ type config struct {
 	JWKSURL      string
 	AuthDisabled bool
 	AutoMigrate  bool
+	Env          string // LEDGERCORE_ENV: dev (default) or sandbox-public
 }
 
 func loadConfig() (config, error) {
@@ -48,9 +50,15 @@ func loadConfig() (config, error) {
 		JWKSURL:      getenv("LEDGERCORE_JWKS_URL", "http://localhost:8082/.well-known/jwks.json"),
 		AuthDisabled: os.Getenv("LEDGERCORE_AUTH_DISABLED") == "true",
 		AutoMigrate:  os.Getenv("LEDGERCORE_AUTO_MIGRATE") == "true",
+		Env:          getenv("LEDGERCORE_ENV", "dev"),
 	}
 	if cfg.DatabaseURL == "" {
 		return config{}, errors.New("LEDGERCORE_DATABASE_URL is required")
+	}
+	// Fail closed on public sandbox deployments: disabled auth must never
+	// reach an internet-facing environment.
+	if cfg.Env == "sandbox-public" && cfg.AuthDisabled {
+		return config{}, errors.New("refusing to start: LEDGERCORE_AUTH_DISABLED=true is forbidden when LEDGERCORE_ENV=sandbox-public")
 	}
 	return cfg, nil
 }
@@ -118,6 +126,14 @@ func run() error {
 			return err
 		}
 		go outbox.NewPoller(pool, publisher, outbox.DefaultInterval).Run(ctx)
+
+		// Sandbox TTL: purge this schema when identity announces an
+		// expired tenant.
+		purgeSub, err := natsconsumer.StartPurgeConsumer(ctx, nc, pool)
+		if err != nil {
+			return err
+		}
+		defer purgeSub.Unsubscribe() //nolint:errcheck // best-effort on shutdown
 	} else {
 		slog.Info("LEDGERCORE_NATS_URL is empty; outbox poller disabled, events stay in the outbox table")
 	}

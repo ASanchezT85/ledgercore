@@ -12,7 +12,7 @@ import (
 const StreamName = "LEDGERCORE"
 
 // streamSubjects covers every topic in the platform.
-var streamSubjects = []string{"ledger.>", "recon.>"}
+var streamSubjects = []string{"ledger.>", "recon.>", "identity.>"}
 
 // NATSPublisher publishes envelopes to NATS JetStream. Create it with
 // NewNATSPublisher, which also ensures the LEDGERCORE stream exists.
@@ -27,19 +27,43 @@ func NewNATSPublisher(nc *nats.Conn) (*NATSPublisher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("events: jetstream context: %w", err)
 	}
-	_, err = js.StreamInfo(StreamName)
-	if errors.Is(err, nats.ErrStreamNotFound) {
+	info, err := js.StreamInfo(StreamName)
+	switch {
+	case errors.Is(err, nats.ErrStreamNotFound):
 		_, err = js.AddStream(&nats.StreamConfig{
 			Name:      StreamName,
 			Subjects:  streamSubjects,
 			Storage:   nats.FileStorage,
 			Retention: nats.LimitsPolicy,
 		})
+	case err == nil && !sameSubjects(info.Config.Subjects, streamSubjects):
+		// The stream predates a new subject family (e.g. identity.>):
+		// widen its subject list in place, keeping the rest of the config.
+		cfg := info.Config
+		cfg.Subjects = streamSubjects
+		_, err = js.UpdateStream(&cfg)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("events: ensure stream %s: %w", StreamName, err)
 	}
 	return &NATSPublisher{js: js}, nil
+}
+
+// sameSubjects reports whether both subject lists contain the same set.
+func sameSubjects(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]struct{}, len(a))
+	for _, s := range a {
+		set[s] = struct{}{}
+	}
+	for _, s := range b {
+		if _, ok := set[s]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Publish sends the envelope to its topic. The envelope id doubles as the

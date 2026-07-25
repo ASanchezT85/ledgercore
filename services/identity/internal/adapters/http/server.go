@@ -33,17 +33,31 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
+// SandboxService is the self-service signup port; *app.SandboxService
+// implements it. nil disables the public signup endpoint.
+type SandboxService interface {
+	Signup(ctx context.Context, email, companyName string) (app.SandboxSignup, error)
+}
+
 // Server owns the HTTP wiring of the identity service.
 type Server struct {
 	svc        IdentityService
+	sandbox    SandboxService
 	db         Pinger
 	adminToken string
 }
 
 // New builds the HTTP adapter. adminToken is the shared secret required by
 // the bootstrap admin endpoints (X-Admin-Token); empty disables them.
+// sandbox may be nil to disable the public signup endpoint.
 func New(svc IdentityService, db Pinger, adminToken string) *Server {
 	return &Server{svc: svc, db: db, adminToken: adminToken}
+}
+
+// WithSandbox enables the public self-service signup endpoint.
+func (s *Server) WithSandbox(sandbox SandboxService) *Server {
+	s.sandbox = sandbox
+	return s
 }
 
 // Handler returns the fully wired handler: routes + shared middlewares.
@@ -55,6 +69,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("POST /v1/auth/token", s.handleIssueToken)
 	mux.HandleFunc("GET /.well-known/jwks.json", s.handleJWKS)
+	if s.sandbox != nil {
+		// Public self-service sandbox signup. Abuse controls: per-IP rate
+		// limit at the gateway (traefik) plus one-signup-per-email and a
+		// global daily cap enforced transactionally by the service.
+		mux.HandleFunc("POST /v1/sandbox/signups", s.handleSandboxSignup)
+	}
 
 	// Admin (bootstrap) endpoints, gated by X-Admin-Token.
 	mux.Handle("POST /v1/tenants", s.admin(s.handleCreateTenant))

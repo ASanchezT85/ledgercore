@@ -15,6 +15,12 @@ import (
 const (
 	TenantStatusActive    = "active"
 	TenantStatusSuspended = "suspended"
+	// TenantStatusPurging: sandbox TTL elapsed; expiry announced to the
+	// platform, grace period running before credentials are deleted.
+	TenantStatusPurging = "purging"
+	// TenantStatusPurged: grace elapsed; API keys deleted, downstream
+	// schemas purged. Terminal state kept for audit.
+	TenantStatusPurged = "purged"
 )
 
 // API key environments. They mirror libs/go/ident.EnvSandbox / EnvLive.
@@ -28,6 +34,10 @@ const (
 var (
 	ErrNotFound     = errors.New("resource not found")
 	ErrSlugConflict = errors.New("slug is already taken")
+	// ErrEmailTaken: the email already claimed its one sandbox signup.
+	ErrEmailTaken = errors.New("email already has a sandbox tenant")
+	// ErrSignupLimitReached: the global signups-per-day cap was hit.
+	ErrSignupLimitReached = errors.New("daily sandbox signup limit reached")
 )
 
 // Tenant is a customer of the platform. The tenant registry is a system-level
@@ -39,6 +49,8 @@ type Tenant struct {
 	Slug      string
 	Status    string
 	CreatedAt time.Time
+	// ExpiresAt is the sandbox TTL; nil means the tenant never expires.
+	ExpiresAt *time.Time
 }
 
 // Active reports whether the tenant may authenticate and operate.

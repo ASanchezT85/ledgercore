@@ -21,6 +21,7 @@ import (
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/httpapi"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/natsconsumer"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/postgres"
+	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/purge"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/config"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/outbox"
@@ -94,6 +95,14 @@ func run(logger *slog.Logger) error {
 			return err
 		}
 		defer sub.Unsubscribe() //nolint:errcheck // best-effort on shutdown
+
+		// Sandbox TTL: purge this schema when identity announces an
+		// expired tenant.
+		purgeSub, err := purge.Start(ctx, nc, pool)
+		if err != nil {
+			return err
+		}
+		defer purgeSub.Unsubscribe() //nolint:errcheck // best-effort on shutdown
 
 		go outbox.Run(ctx, store, pub, outbox.DefaultInterval, logger)
 	} else {

@@ -31,8 +31,8 @@ func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 // CreateTenant inserts a tenant; a duplicate slug maps to domain.ErrSlugConflict.
 func (s *Store) CreateTenant(ctx context.Context, t domain.Tenant) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO tenants (id, name, slug, status, created_at) VALUES ($1, $2, $3, $4, $5)`,
-		t.ID, t.Name, t.Slug, t.Status, t.CreatedAt,
+		`INSERT INTO tenants (id, name, slug, status, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+		t.ID, t.Name, t.Slug, t.Status, t.CreatedAt, t.ExpiresAt,
 	)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
@@ -48,9 +48,9 @@ func (s *Store) CreateTenant(ctx context.Context, t domain.Tenant) error {
 func (s *Store) GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, error) {
 	var t domain.Tenant
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, name, slug, status, created_at FROM tenants WHERE id = $1`,
+		`SELECT id, name, slug, status, created_at, expires_at FROM tenants WHERE id = $1`,
 		id,
-	).Scan(&t.ID, &t.Name, &t.Slug, &t.Status, &t.CreatedAt)
+	).Scan(&t.ID, &t.Name, &t.Slug, &t.Status, &t.CreatedAt, &t.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Tenant{}, domain.ErrNotFound
 	}
@@ -63,7 +63,7 @@ func (s *Store) GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, err
 // ListTenants returns every tenant ordered by creation time.
 func (s *Store) ListTenants(ctx context.Context) ([]domain.Tenant, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, slug, status, created_at FROM tenants ORDER BY created_at, id`,
+		`SELECT id, name, slug, status, created_at, expires_at FROM tenants ORDER BY created_at, id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list tenants: %w", err)
@@ -73,7 +73,7 @@ func (s *Store) ListTenants(ctx context.Context) ([]domain.Tenant, error) {
 	var out []domain.Tenant
 	for rows.Next() {
 		var t domain.Tenant
-		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Status, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Status, &t.CreatedAt, &t.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("postgres: scan tenant: %w", err)
 		}
 		out = append(out, t)

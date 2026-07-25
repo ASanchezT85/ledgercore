@@ -15,6 +15,7 @@ type Config struct {
 	JWKSURL      string // LEDGERCORE_JWKS_URL, identity JWKS endpoint
 	AuthDisabled bool   // LEDGERCORE_AUTH_DISABLED, dev only
 	AutoMigrate  bool   // LEDGERCORE_AUTO_MIGRATE
+	Env          string // LEDGERCORE_ENV: dev (default) or sandbox-public
 }
 
 // Load reads the environment. It fails fast when required values are missing
@@ -27,9 +28,14 @@ func Load() (Config, error) {
 		JWKSURL:      os.Getenv("LEDGERCORE_JWKS_URL"),
 		AuthDisabled: boolenv("LEDGERCORE_AUTH_DISABLED"),
 		AutoMigrate:  boolenv("LEDGERCORE_AUTO_MIGRATE"),
+		Env:          getenv("LEDGERCORE_ENV", "dev"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("config: LEDGERCORE_DATABASE_URL is required")
+	}
+	// Fail closed on public sandbox deployments.
+	if cfg.Env == "sandbox-public" && cfg.AuthDisabled {
+		return Config{}, errors.New("config: refusing to start: LEDGERCORE_AUTH_DISABLED=true is forbidden when LEDGERCORE_ENV=sandbox-public")
 	}
 	if !cfg.AuthDisabled && cfg.JWKSURL == "" {
 		return Config{}, errors.New("config: LEDGERCORE_JWKS_URL is required unless LEDGERCORE_AUTH_DISABLED=true")
