@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.ledgercore.dev/events/envelope.schema.json",
+  "title": "EventEnvelope",
+  "description": "Envelope that wraps every event published by LedgerCore. The 'data' payload is described by the per-topic schema referenced by 'type'.",
+  "type": "object",
+  "required": ["id", "type", "tenant_id", "occurred_at", "version", "data"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event id (UUIDv7). Doubles as the deduplication key for consumers."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "ledger.transaction.posted",
+        "ledger.transaction.reversed",
+        "ledger.hold.created",
+        "ledger.hold.captured",
+        "ledger.hold.released",
+        "recon.discrepancy.detected"
+      ],
+      "description": "Topic the event was published to."
+    },
+    "tenant_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC instant the business fact happened."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Envelope schema version. Currently 1."
+    },
+    "data": {
+      "type": "object",
+      "description": "Topic-specific payload; see the schema named after 'type'."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "money": {
+      "$anchor": "money",
+      "type": "object",
+      "required": ["asset", "amount"],
+      "properties": {
+        "asset": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{1,12}$"
+        },
+        "amount": {
+          "type": "string",
+          "pattern": "^-?[0-9]{1,19}$",
+          "description": "int64 minor units, string-encoded."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

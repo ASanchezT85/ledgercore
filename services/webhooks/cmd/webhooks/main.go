@@ -1,0 +1,98 @@
+// Command webhooks runs the LedgerCore webhooks service: the signed webhook
+// dispatcher that fans platform events out to customer endpoints.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/ledgercore/ledgercore/libs/go/obs"
+	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/httpapi"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/natsconsumer"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/postgres"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/config"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/dispatcher"
+)
+
+const serviceName = "webhooks"
+
+func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	if err := run(); err != nil {
+		slog.Error("service exited with error", "service", serviceName, "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	shutdownObs, err := obs.Setup(ctx, serviceName)
+	if err != nil {
+		return fmt.Errorf("observability setup: %w", err)
+	}
+	defer shutdownObs()
+
+	pool, err := pgxutil.NewPool(ctx, cfg.DatabaseURL, postgres.SchemaName)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	if cfg.AutoMigrate {
+		if err := postgres.Migrate(ctx, pool); err != nil {
+			return err
+		}
+		slog.Info("migrations applied", "schema", postgres.SchemaName)
+	}
+
+	repo := postgres.NewRepo(pool)
+	svc := app.NewService(repo, repo)
+
+	consumer := natsconsumer.New(cfg.NATSURL, svc)
+	consumer.Start(ctx)
+	defer consumer.Close()
+
+	disp := dispatcher.New(repo)
+	go disp.Run(ctx)
+
+	srv := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           httpapi.NewHandler(svc, pool, cfg),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		slog.Info("http server listening", "service", serviceName, "addr", cfg.HTTPAddr)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case <-ctx.Done():
+		slog.Info("shutdown signal received")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
+}

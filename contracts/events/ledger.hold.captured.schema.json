@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.ledgercore.dev/events/ledger.hold.captured.schema.json",
+  "title": "LedgerHoldCaptured",
+  "description": "Payload of ledger.hold.captured: a hold was converted (fully or partially) into a posted transaction.",
+  "type": "object",
+  "required": ["hold_id", "ledger_id", "account_id", "captured_amount", "transaction_id", "captured_at"],
+  "properties": {
+    "hold_id": { "type": "string", "format": "uuid" },
+    "ledger_id": { "type": "string", "format": "uuid" },
+    "account_id": { "type": "string", "format": "uuid" },
+    "captured_amount": { "$ref": "envelope.schema.json#money" },
+    "released_amount": {
+      "$ref": "envelope.schema.json#money",
+      "description": "Remainder released on partial capture; omitted on full capture."
+    },
+    "transaction_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Posted transaction created by the capture."
+    },
+    "captured_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "hold_id": "8b7c3d5e-6f7a-7b8c-e3b5-2d3e4f5a6b7c",
+      "ledger_id": "1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21",
+      "account_id": "2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e",
+      "captured_amount": { "asset": "USD", "amount": "2000" },
+      "released_amount": { "asset": "USD", "amount": "500" },
+      "transaction_id": "9c8d4e6f-7a8b-7c9d-f4c6-3e4f5a6b7c8d",
+      "captured_at": "2026-07-24T14:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/*
+ * LedgerCore Console design tokens.
+ * Dark-first fintech palette: deep slate surfaces, emerald/teal accents,
+ * subtle borders and tabular numerals for monetary values.
+ */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", SFMono-Regular,
+    Menlo, monospace;
+
+  /* Surfaces */
+  --color-canvas: #05090f;
+  --color-surface: #0a111c;
+  --color-surface-raised: #0e1726;
+  --color-surface-hover: #131f31;
+
+  /* Borders */
+  --color-edge: rgb(148 163 184 / 0.12);
+  --color-edge-strong: rgb(148 163 184 / 0.24);
+
+  /* Text */
+  --color-ink: #e6edf6;
+  --color-ink-muted: #94a3b8;
+  --color-ink-faint: #5b6b81;
+
+  /* Brand accents */
+  --color-accent: #34d399;
+  --color-accent-deep: #10b981;
+  --color-accent-soft: rgb(52 211 153 / 0.12);
+  --color-teal-glow: #2dd4bf;
+
+  /* Status */
+  --color-danger: #f87171;
+  --color-danger-soft: rgb(248 113 113 / 0.12);
+  --color-warning: #fbbf24;
+  --color-warning-soft: rgb(251 191 36 / 0.12);
+  --color-info: #7dd3fc;
+  --color-info-soft: rgb(125 211 252 / 0.12);
+
+  /* Radii */
+  --radius-card: 0.875rem;
+  --radius-control: 0.5rem;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient background: faint emerald glow on deep slate. */
+.bg-ambient {
+  background:
+    radial-gradient(
+      1200px 600px at 85% -10%,
+      rgb(16 185 129 / 0.07),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at -10% 110%,
+      rgb(45 212 191 / 0.05),
+      transparent 60%
+    ),
+    var(--color-canvas);
+}
+
+/* Monetary values always use tabular numerals. */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgb(52 211 153 / 0.25);
+}
+
+/* Slim scrollbars that blend with the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.25) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.25);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

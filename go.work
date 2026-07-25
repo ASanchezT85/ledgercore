@@ -1,0 +1,9 @@
+go 1.26
+
+use (
+	./libs/go
+	./services/identity
+	./services/ledger-core
+	./services/reconciliation
+	./services/webhooks
+)

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.ledgercore.dev/events/ledger.transaction.reversed.schema.json",
+  "title": "LedgerTransactionReversed",
+  "description": "Payload of ledger.transaction.reversed: a posted transaction was reversed by a compensating transaction.",
+  "type": "object",
+  "required": ["transaction_id", "reversal_transaction_id", "ledger_id", "reversed_at"],
+  "properties": {
+    "transaction_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The original transaction that is now reversed."
+    },
+    "reversal_transaction_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The compensating transaction that performed the reversal."
+    },
+    "ledger_id": { "type": "string", "format": "uuid" },
+    "reason": { "type": "string", "maxLength": 1024 },
+    "reversed_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "transaction_id": "3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f",
+      "reversal_transaction_id": "7a6b2c4d-5e6f-7a8b-d2a4-1c2d3e4f5a6b",
+      "ledger_id": "1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21",
+      "reason": "chargeback",
+      "reversed_at": "2026-07-25T09:00:00Z"
+    }
+  ]
+}

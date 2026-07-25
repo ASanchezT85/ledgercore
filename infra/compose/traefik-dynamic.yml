@@ -1,0 +1,47 @@
+# Static routing table for the dev gateway (file provider).
+#
+# The docker provider needs the daemon socket, which is not reliably
+# available from inside a container on Docker Desktop for Windows. This
+# file mirrors exactly the routing the compose labels used to declare:
+# specific prefixes win with priority 100; ledger-core catches the rest
+# of /v1 at priority 1.
+http:
+  routers:
+    identity:
+      entryPoints: [web]
+      rule: "PathPrefix(`/v1/auth`) || PathPrefix(`/v1/tenants`) || PathPrefix(`/v1/api-keys`) || PathPrefix(`/.well-known`)"
+      priority: 100
+      service: identity
+    reconciliation:
+      entryPoints: [web]
+      rule: "PathPrefix(`/v1/reconciliation`)"
+      priority: 100
+      service: reconciliation
+    webhooks:
+      entryPoints: [web]
+      rule: "PathPrefix(`/v1/webhook-subscriptions`) || PathPrefix(`/v1/webhook-deliveries`)"
+      priority: 100
+      service: webhooks
+    ledger-core:
+      entryPoints: [web]
+      rule: "PathPrefix(`/v1`)"
+      priority: 1
+      service: ledger-core
+
+  services:
+    identity:
+      loadBalancer:
+        servers:
+          - url: "http://identity:8082"
+    reconciliation:
+      loadBalancer:
+        servers:
+          - url: "http://reconciliation:8083"
+    webhooks:
+      loadBalancer:
+        servers:
+          - url: "http://webhooks:8084"
+    ledger-core:
+      loadBalancer:
+        servers:
+          - url: "http://ledger-core:8081"

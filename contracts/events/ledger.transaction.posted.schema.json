@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.ledgercore.dev/events/ledger.transaction.posted.schema.json",
+  "title": "LedgerTransactionPosted",
+  "description": "Payload of ledger.transaction.posted: a balanced transaction was posted to the ledger.",
+  "type": "object",
+  "required": ["transaction_id", "ledger_id", "idempotency_key", "postings", "posted_at"],
+  "properties": {
+    "transaction_id": { "type": "string", "format": "uuid" },
+    "ledger_id": { "type": "string", "format": "uuid" },
+    "idempotency_key": { "type": "string", "maxLength": 255 },
+    "description": { "type": "string", "maxLength": 1024 },
+    "postings": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["account_id", "direction", "amount"],
+        "properties": {
+          "account_id": { "type": "string", "format": "uuid" },
+          "direction": { "type": "string", "enum": ["DEBIT", "CREDIT"] },
+          "amount": { "$ref": "envelope.schema.json#money" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "posted_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "transaction_id": "3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f",
+      "ledger_id": "1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21",
+      "idempotency_key": "dep-2026-0001",
+      "description": "Customer USD deposit",
+      "postings": [
+        { "account_id": "5e4f0a2b-3c4d-7e6f-b072-9a0b1c2d3e4f", "direction": "DEBIT", "amount": { "asset": "USD", "amount": "10000" } },
+        { "account_id": "2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e", "direction": "CREDIT", "amount": { "asset": "USD", "amount": "9700" } },
+        { "account_id": "6f5a1b3c-4d5e-7f80-c193-0b1c2d3e4f5a", "direction": "CREDIT", "amount": { "asset": "USD", "amount": "300" } }
+      ],
+      "posted_at": "2026-07-24T12:05:00Z"
+    }
+  ]
+}

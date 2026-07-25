@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.ledgercore.dev/events/ledger.hold.created.schema.json",
+  "title": "LedgerHoldCreated",
+  "description": "Payload of ledger.hold.created: funds were reserved on an account.",
+  "type": "object",
+  "required": ["hold_id", "ledger_id", "account_id", "amount", "expires_at", "created_at"],
+  "properties": {
+    "hold_id": { "type": "string", "format": "uuid" },
+    "ledger_id": { "type": "string", "format": "uuid" },
+    "account_id": { "type": "string", "format": "uuid" },
+    "idempotency_key": { "type": "string", "maxLength": 255 },
+    "amount": { "$ref": "envelope.schema.json#money" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "hold_id": "8b7c3d5e-6f7a-7b8c-e3b5-2d3e4f5a6b7c",
+      "ledger_id": "1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21",
+      "account_id": "2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e",
+      "idempotency_key": "auth-2026-0042",
+      "amount": { "asset": "USD", "amount": "2500" },
+      "expires_at": "2026-07-31T00:00:00Z",
+      "created_at": "2026-07-24T13:00:00Z"
+    }
+  ]
+}

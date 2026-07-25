@@ -1,0 +1,1456 @@
+openapi: 3.1.0
+info:
+  title: LedgerCore Ledger API
+  version: 1.0.0
+  description: |
+    Double-entry ledger API. All monetary amounts are integers in minor units,
+    string-encoded to avoid int64 precision loss in JSON, together with an
+    asset code. Every transaction must balance debits and credits per asset.
+
+    Multi-tenancy: the tenant is derived from the JWT; resources are always
+    scoped to the authenticated tenant.
+  contact:
+    name: LedgerCore Platform Team
+    url: https://github.com/ledgercore/ledgercore
+servers:
+  - url: http://localhost:8081
+    description: Local development (direct)
+  - url: http://localhost:8080
+    description: Local development (via gateway; paths are routed unchanged)
+security:
+  - bearerAuth: []
+tags:
+  - name: Ledgers
+    description: A ledger is an isolated chart of accounts within a tenant.
+  - name: Accounts
+    description: Accounts hold balances per asset and receive postings.
+  - name: Transactions
+    description: Balanced sets of postings. Lifecycle draft -> posted -> reversed.
+  - name: Holds
+    description: Two-phase authorizations that reserve funds before capture.
+  - name: Reports
+    description: Accounting reports.
+
+paths:
+  /v1/ledgers:
+    post:
+      operationId: createLedger
+      tags: [Ledgers]
+      summary: Create a ledger
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerCreate'
+            examples:
+              main:
+                summary: Main USD ledger
+                value:
+                  name: main
+                  description: Primary operating ledger
+                  metadata:
+                    region: us
+      responses:
+        '201':
+          description: Ledger created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ledger'
+              examples:
+                main:
+                  value:
+                    id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    name: main
+                    description: Primary operating ledger
+                    environment: sandbox
+                    metadata:
+                      region: us
+                    created_at: '2026-07-24T12:00:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    get:
+      operationId: listLedgers
+      tags: [Ledgers]
+      summary: List ledgers
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of ledgers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Ledger'
+                  next_cursor:
+                    type: [string, 'null']
+                    description: Opaque cursor for the next page; null when exhausted.
+              examples:
+                page:
+                  value:
+                    data:
+                      - id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                        name: main
+                        description: Primary operating ledger
+                        environment: sandbox
+                        metadata: {}
+                        created_at: '2026-07-24T12:00:00Z'
+                    next_cursor: null
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/ledgers/{id}:
+    get:
+      operationId: getLedger
+      tags: [Ledgers]
+      summary: Get a ledger
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The ledger.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ledger'
+              examples:
+                main:
+                  value:
+                    id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    name: main
+                    description: Primary operating ledger
+                    environment: sandbox
+                    metadata: {}
+                    created_at: '2026-07-24T12:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/accounts:
+    post:
+      operationId: createAccount
+      tags: [Accounts]
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountCreate'
+            examples:
+              customerWallet:
+                summary: Customer wallet account
+                value:
+                  ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                  name: customer:cust_42:wallet
+                  type: liability
+                  normal_balance: CREDIT
+                  metadata:
+                    customer_id: cust_42
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+              examples:
+                customerWallet:
+                  value:
+                    id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    name: customer:cust_42:wallet
+                    type: liability
+                    normal_balance: CREDIT
+                    status: active
+                    metadata:
+                      customer_id: cust_42
+                    created_at: '2026-07-24T12:01:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    get:
+      operationId: listAccounts
+      tags: [Accounts]
+      summary: List accounts
+      parameters:
+        - name: ledger_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/AccountType'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+                  next_cursor:
+                    type: [string, 'null']
+              examples:
+                page:
+                  value:
+                    data:
+                      - id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                        ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                        name: customer:cust_42:wallet
+                        type: liability
+                        normal_balance: CREDIT
+                        status: active
+                        metadata: {}
+                        created_at: '2026-07-24T12:01:00Z'
+                    next_cursor: null
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/accounts/{id}:
+    get:
+      operationId: getAccount
+      tags: [Accounts]
+      summary: Get an account
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+              examples:
+                customerWallet:
+                  value:
+                    id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    name: customer:cust_42:wallet
+                    type: liability
+                    normal_balance: CREDIT
+                    status: active
+                    metadata: {}
+                    created_at: '2026-07-24T12:01:00Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/accounts/{id}/balances:
+    get:
+      operationId: getAccountBalances
+      tags: [Accounts]
+      summary: Get account balances per asset
+      description: |
+        Returns one balance row per asset the account has ever touched.
+        `pending` includes draft transactions and uncaptured holds;
+        `available` = posted - active holds against the account.
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Balances per asset.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Balance'
+              examples:
+                afterDeposit:
+                  summary: Customer wallet after the USD 100 deposit (97 credited)
+                  value:
+                    data:
+                      - asset: USD
+                        exponent: 2
+                        posted: '9700'
+                        pending: '0'
+                        available: '9700'
+                        held: '0'
+                        posted_debits: '0'
+                        posted_credits: '9700'
+                        version: 1
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/accounts/{id}/entries:
+    get:
+      operationId: listAccountEntries
+      tags: [Accounts]
+      summary: List the postings that hit an account
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: asset
+          in: query
+          schema:
+            $ref: '#/components/schemas/AssetCode'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of entries, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entry'
+                  next_cursor:
+                    type: [string, 'null']
+              examples:
+                page:
+                  value:
+                    data:
+                      - id: 4d3e9f1a-2b3c-7d5e-af61-8a9b0c1d2e3f
+                        transaction_id: 3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f
+                        account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                        direction: CREDIT
+                        amount:
+                          asset: USD
+                          amount: '9700'
+                        created_at: '2026-07-24T12:05:00Z'
+                    next_cursor: null
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/transactions:
+    post:
+      operationId: createTransaction
+      tags: [Transactions]
+      summary: Create a transaction
+      description: |
+        Creates a balanced transaction. With `status=posted` (default) it is
+        atomically validated and posted; with `status=draft` it can be posted
+        later via `POST /v1/transactions/{id}/post`.
+
+        `idempotency_key` is unique per tenant: retrying with the same key
+        returns the original transaction instead of creating a duplicate
+        (200 with the `X-Idempotent-Replay: true` response header). The key
+        may be sent in the body or via the `Idempotency-Key` request header.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Alternative to the `idempotency_key` body field (the body field wins).
+          schema:
+            type: string
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreate'
+            examples:
+              usdDeposit:
+                summary: USD 100 deposit — 97 to the customer, 3 platform fee
+                value:
+                  ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                  idempotency_key: dep-2026-0001
+                  description: Customer USD deposit
+                  postings:
+                    - account_id: 5e4f0a2b-3c4d-7e6f-b072-9a0b1c2d3e4f
+                      direction: DEBIT
+                      amount: { asset: USD, amount: '10000' }
+                    - account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                      direction: CREDIT
+                      amount: { asset: USD, amount: '9700' }
+                    - account_id: 6f5a1b3c-4d5e-7f80-c193-0b1c2d3e4f5a
+                      direction: CREDIT
+                      amount: { asset: USD, amount: '300' }
+                  metadata:
+                    channel: bank_transfer
+      responses:
+        '201':
+          description: Transaction created (and posted unless status=draft was requested).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              examples:
+                usdDeposit:
+                  value:
+                    id: 3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    idempotency_key: dep-2026-0001
+                    description: Customer USD deposit
+                    status: posted
+                    postings:
+                      - account_id: 5e4f0a2b-3c4d-7e6f-b072-9a0b1c2d3e4f
+                        direction: DEBIT
+                        amount: { asset: USD, amount: '10000' }
+                      - account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '9700' }
+                      - account_id: 6f5a1b3c-4d5e-7f80-c193-0b1c2d3e4f5a
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '300' }
+                    metadata:
+                      channel: bank_transfer
+                    reversed_by: null
+                    reverses: null
+                    effective_at: '2026-07-24T12:05:00Z'
+                    created_at: '2026-07-24T12:05:00Z'
+                    posted_at: '2026-07-24T12:05:00Z'
+        '200':
+          description: Idempotent replay — the transaction already existed for this idempotency key.
+          headers:
+            X-Idempotent-Replay:
+              description: Always "true" on a replayed response.
+              schema:
+                type: string
+                const: 'true'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: The transaction does not balance per asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                unbalanced:
+                  value:
+                    error:
+                      code: unbalanced_transaction
+                      message: 'debits (10000 USD) do not equal credits (9700 USD)'
+    get:
+      operationId: listTransactions
+      tags: [Transactions]
+      summary: List transactions
+      parameters:
+        - name: ledger_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionStatus'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of transactions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  next_cursor:
+                    type: [string, 'null']
+              examples:
+                page:
+                  value:
+                    data: []
+                    next_cursor: null
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/transactions/{id}:
+    get:
+      operationId: getTransaction
+      tags: [Transactions]
+      summary: Get a transaction
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The transaction.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              examples:
+                usdDeposit:
+                  value:
+                    id: 3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    idempotency_key: dep-2026-0001
+                    description: Customer USD deposit
+                    status: posted
+                    postings:
+                      - account_id: 5e4f0a2b-3c4d-7e6f-b072-9a0b1c2d3e4f
+                        direction: DEBIT
+                        amount: { asset: USD, amount: '10000' }
+                      - account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '9700' }
+                      - account_id: 6f5a1b3c-4d5e-7f80-c193-0b1c2d3e4f5a
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '300' }
+                    metadata: {}
+                    reversed_by: null
+                    reverses: null
+                    effective_at: '2026-07-24T12:05:00Z'
+                    created_at: '2026-07-24T12:05:00Z'
+                    posted_at: '2026-07-24T12:05:00Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/transactions/{id}/post:
+    post:
+      operationId: postTransaction
+      tags: [Transactions]
+      summary: Post a draft transaction
+      description: Transitions a draft transaction to posted. Idempotent for already-posted transactions.
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The transaction, now posted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              examples:
+                posted:
+                  value:
+                    id: 3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    idempotency_key: dep-2026-0001
+                    description: Customer USD deposit
+                    status: posted
+                    postings: []
+                    metadata: {}
+                    reversed_by: null
+                    reverses: null
+                    effective_at: '2026-07-24T12:05:00Z'
+                    created_at: '2026-07-24T12:05:00Z'
+                    posted_at: '2026-07-24T12:06:00Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The transaction is reversed and cannot be posted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                reversed:
+                  value:
+                    error:
+                      code: invalid_state
+                      message: transaction is reversed and cannot be posted
+
+  /v1/transactions/{id}/reverse:
+    post:
+      operationId: reverseTransaction
+      tags: [Transactions]
+      summary: Reverse a posted transaction
+      description: |
+        Creates and posts a new compensating transaction with mirrored
+        postings, links both, and marks the original as reversed.
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 255
+                reason:
+                  type: string
+                  maxLength: 1024
+            examples:
+              chargeback:
+                value:
+                  idempotency_key: rev-dep-2026-0001
+                  reason: chargeback
+      responses:
+        '201':
+          description: The reversal transaction.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              examples:
+                reversal:
+                  value:
+                    id: 7a6b2c4d-5e6f-7a8b-d2a4-1c2d3e4f5a6b
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    idempotency_key: rev-dep-2026-0001
+                    description: 'Reversal of dep-2026-0001: chargeback'
+                    status: posted
+                    postings:
+                      - account_id: 5e4f0a2b-3c4d-7e6f-b072-9a0b1c2d3e4f
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '10000' }
+                      - account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                        direction: DEBIT
+                        amount: { asset: USD, amount: '9700' }
+                      - account_id: 6f5a1b3c-4d5e-7f80-c193-0b1c2d3e4f5a
+                        direction: DEBIT
+                        amount: { asset: USD, amount: '300' }
+                    metadata: {}
+                    reversed_by: null
+                    reverses: 3c2d8e0f-1a2b-7c4d-9e5f-7a8b9c0d1e2f
+                    effective_at: '2026-07-25T09:00:00Z'
+                    created_at: '2026-07-25T09:00:00Z'
+                    posted_at: '2026-07-25T09:00:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The transaction is not posted, or is already reversed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                alreadyReversed:
+                  value:
+                    error:
+                      code: invalid_state
+                      message: transaction is already reversed
+
+  /v1/holds:
+    post:
+      operationId: createHold
+      tags: [Holds]
+      summary: Create a hold
+      description: |
+        Reserves funds on an account (reducing `available` without moving
+        money) until captured or released.
+
+        `idempotency_key` is unique per tenant: retrying with the same key
+        returns the original hold (200 + `X-Idempotent-Replay: true`).
+
+        Note: automatic release of expired holds (sweeper) is not implemented
+        yet (fase 1.5); `expires_at` is stored and enforced at capture time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldCreate'
+            examples:
+              cardAuth:
+                summary: Authorize USD 25.00 on a customer wallet
+                value:
+                  ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                  account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                  idempotency_key: auth-2026-0042
+                  amount: { asset: USD, amount: '2500' }
+                  expires_at: '2026-07-31T00:00:00Z'
+                  metadata:
+                    card_auth_id: auth_9f3
+      responses:
+        '201':
+          description: Hold created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hold'
+              examples:
+                cardAuth:
+                  value:
+                    id: 8b7c3d5e-6f7a-7b8c-e3b5-2d3e4f5a6b7c
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                    idempotency_key: auth-2026-0042
+                    amount: { asset: USD, amount: '2500' }
+                    status: active
+                    transaction_id: null
+                    expires_at: '2026-07-31T00:00:00Z'
+                    metadata:
+                      card_auth_id: auth_9f3
+                    created_at: '2026-07-24T13:00:00Z'
+        '200':
+          description: Idempotent replay — the hold already existed for this idempotency key.
+          headers:
+            X-Idempotent-Replay:
+              description: Always "true" on a replayed response.
+              schema:
+                type: string
+                const: 'true'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hold'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Insufficient available balance to place the hold.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                insufficient:
+                  value:
+                    error:
+                      code: insufficient_funds
+                      message: 'available balance 9700 USD is less than hold amount 2500000 USD'
+
+  /v1/holds/{id}:
+    get:
+      operationId: getHold
+      tags: [Holds]
+      summary: Get a hold
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The hold.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hold'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/holds/{id}/capture:
+    post:
+      operationId: captureHold
+      tags: [Holds]
+      summary: Capture a hold
+      description: |
+        Finalizes the hold (fully or partially): the held funds are freed and
+        the hold is marked captured, optionally linked to the posted
+        transaction that moved the money. A partial capture releases the
+        remainder. Capture does not create the transaction itself — post it
+        via `POST /v1/transactions` and link it with `transaction_id`.
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                amount:
+                  $ref: '#/components/schemas/Money'
+                  description: Amount to capture; defaults to the full hold amount.
+                transaction_id:
+                  type: string
+                  format: uuid
+                  description: Posted transaction to link as the money movement of this capture.
+            examples:
+              partial:
+                summary: Capture USD 20.00 of the USD 25.00 hold
+                value:
+                  amount: { asset: USD, amount: '2000' }
+      responses:
+        '200':
+          description: Hold captured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hold'
+              examples:
+                captured:
+                  value:
+                    id: 8b7c3d5e-6f7a-7b8c-e3b5-2d3e4f5a6b7c
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                    idempotency_key: auth-2026-0042
+                    amount: { asset: USD, amount: '2500' }
+                    status: captured
+                    transaction_id: 9c8d4e6f-7a8b-7c9d-f4c6-3e4f5a6b7c8d
+                    expires_at: '2026-07-31T00:00:00Z'
+                    metadata: {}
+                    created_at: '2026-07-24T13:00:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The hold is not active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notActive:
+                  value:
+                    error:
+                      code: invalid_state
+                      message: hold is already released
+
+  /v1/holds/{id}/release:
+    post:
+      operationId: releaseHold
+      tags: [Holds]
+      summary: Release a hold
+      description: Frees the reserved funds without moving money.
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Hold released.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hold'
+              examples:
+                released:
+                  value:
+                    id: 8b7c3d5e-6f7a-7b8c-e3b5-2d3e4f5a6b7c
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                    idempotency_key: auth-2026-0042
+                    amount: { asset: USD, amount: '2500' }
+                    status: released
+                    transaction_id: null
+                    expires_at: '2026-07-31T00:00:00Z'
+                    metadata: {}
+                    created_at: '2026-07-24T13:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The hold is not active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notActive:
+                  value:
+                    error:
+                      code: invalid_state
+                      message: hold is already captured
+
+  /v1/trial-balance:
+    get:
+      operationId: getTrialBalance
+      tags: [Reports]
+      summary: Trial balance
+      description: |
+        Sums debits and credits per account and asset over posted
+        transactions. For a healthy ledger, total debits equal total credits
+        per asset.
+      parameters:
+        - name: ledger_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: as_of
+          in: query
+          description: |
+            Compute the balance as of this instant. Accepted but currently
+            ignored — historical as-of is not implemented yet (fase 1.5);
+            the report always reflects the current state.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: The trial balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialBalance'
+              examples:
+                afterDeposit:
+                  summary: Trial balance after the USD 100 deposit
+                  value:
+                    ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                    as_of: '2026-07-24T12:10:00Z'
+                    rows:
+                      - account_id: 5e4f0a2b-3c4d-7e6f-b072-9a0b1c2d3e4f
+                        account_name: assets:cash
+                        account_type: asset
+                        asset: USD
+                        debits: '10000'
+                        credits: '0'
+                        net: '10000'
+                      - account_id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                        account_name: customer:cust_42:wallet
+                        account_type: liability
+                        asset: USD
+                        debits: '0'
+                        credits: '9700'
+                        net: '-9700'
+                      - account_id: 6f5a1b3c-4d5e-7f80-c193-0b1c2d3e4f5a
+                        account_name: revenue:fees
+                        account_type: revenue
+                        asset: USD
+                        debits: '0'
+                        credits: '300'
+                        net: '-300'
+                    totals:
+                      - asset: USD
+                        debits: '10000'
+                        credits: '10000'
+                        balanced: true
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/statements:
+    get:
+      operationId: listStatements
+      tags: [Reports]
+      summary: Account statements (stub)
+      description: 'Not implemented yet (fase 1.5): always answers 501.'
+      responses:
+        '501': { $ref: '#/components/responses/NotImplemented' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/provider-positions:
+    get:
+      operationId: listProviderPositions
+      tags: [Reports]
+      summary: Provider positions (stub)
+      description: 'Not implemented yet (fase 1.5): always answers 501.'
+      responses:
+        '501': { $ref: '#/components/responses/NotImplemented' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: EdDSA JWT issued by the identity service (POST /v1/auth/token).
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque keyset cursor from a previous page.
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            badRequest:
+              value:
+                error:
+                  code: bad_request
+                  message: 'unknown field "amonut"'
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              value:
+                error:
+                  code: invalid_token
+                  message: token is invalid or expired
+    NotFound:
+      description: The resource does not exist within this tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: not_found
+                  message: resource not found
+    NotImplemented:
+      description: Declared stub for a future milestone (`not_implemented`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            stub:
+              value:
+                error:
+                  code: not_implemented
+                  message: GET /v1/statements is not implemented yet; it is planned for a future milestone
+    Conflict:
+      description: Uniqueness conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            conflict:
+              value:
+                error:
+                  code: conflict
+                  message: a resource with that name already exists
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code (snake_case).
+            message:
+              type: string
+              description: Human-readable explanation. Never parse this.
+
+    AssetCode:
+      type: string
+      pattern: '^[A-Z0-9]{1,12}$'
+      description: Asset code registered in the ledger asset registry (e.g. USD, BTC, USDC).
+      examples: [USD]
+
+    Money:
+      type: object
+      required: [asset, amount]
+      additionalProperties: false
+      description: |
+        Integer amount in minor units, string-encoded so int64 values survive
+        JSON round trips. The exponent lives in the asset registry.
+      properties:
+        asset:
+          $ref: '#/components/schemas/AssetCode'
+        amount:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: int64 in minor units, string-encoded (e.g. "10000" = USD 100.00).
+      examples:
+        - asset: USD
+          amount: '10000'
+
+    Direction:
+      type: string
+      enum: [DEBIT, CREDIT]
+
+    TransactionStatus:
+      type: string
+      enum: [draft, posted, reversed]
+
+    AccountType:
+      type: string
+      enum: [asset, liability, equity, revenue, expense]
+
+    AccountStatus:
+      type: string
+      enum: [active, frozen, closed]
+
+    HoldStatus:
+      type: string
+      enum: [active, captured, released, expired]
+
+    Metadata:
+      type: object
+      maxProperties: 50
+      additionalProperties:
+        type: string
+        maxLength: 500
+      description: Free-form string key/value pairs attached by the tenant.
+
+    LedgerCreate:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 1024
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    Ledger:
+      type: object
+      required: [id, name, environment, metadata, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        environment:
+          type: string
+          enum: [sandbox, live]
+          description: Taken from the `env` claim of the creating token; not client-settable.
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        created_at:
+          type: string
+          format: date-time
+
+    AccountCreate:
+      type: object
+      required: [ledger_id, name, type, normal_balance]
+      additionalProperties: false
+      properties:
+        ledger_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Unique within the ledger. Conventionally colon-namespaced.
+        type:
+          $ref: '#/components/schemas/AccountType'
+        normal_balance:
+          $ref: '#/components/schemas/Direction'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    Account:
+      type: object
+      required: [id, ledger_id, name, type, normal_balance, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ledger_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/AccountType'
+        normal_balance:
+          $ref: '#/components/schemas/Direction'
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        created_at:
+          type: string
+          format: date-time
+
+    Balance:
+      type: object
+      required: [asset, exponent, posted, pending, available, held, posted_debits, posted_credits, version]
+      properties:
+        asset:
+          $ref: '#/components/schemas/AssetCode'
+        exponent:
+          type: integer
+          minimum: 0
+          maximum: 18
+          description: Decimal places of the asset (registry value), for display.
+        posted:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: Net posted balance in minor units, signed by normal_balance.
+        pending:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+        available:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+        held:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: Sum of active holds against the account, in minor units.
+        posted_debits:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: Gross posted debits, unsigned by normal_balance.
+        posted_credits:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: Gross posted credits, unsigned by normal_balance.
+        version:
+          type: integer
+          format: int64
+          description: Optimistic-concurrency version of the balance row; increases with every posting.
+
+    Posting:
+      type: object
+      required: [account_id, direction, amount]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Assigned by the server; present in responses only.
+        account_id:
+          type: string
+          format: uuid
+        direction:
+          $ref: '#/components/schemas/Direction'
+        amount:
+          $ref: '#/components/schemas/Money'
+
+    Entry:
+      type: object
+      required: [id, transaction_id, account_id, direction, amount, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        direction:
+          $ref: '#/components/schemas/Direction'
+        amount:
+          $ref: '#/components/schemas/Money'
+        created_at:
+          type: string
+          format: date-time
+
+    TransactionCreate:
+      type: object
+      required: [ledger_id, postings]
+      additionalProperties: false
+      properties:
+        ledger_id:
+          type: string
+          format: uuid
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: |
+            Unique per tenant. Retries with the same key return the original
+            transaction (200 + `X-Idempotent-Replay: true`). Required, but it
+            may be supplied via the `Idempotency-Key` request header instead
+            of this field; the body field wins when both are present.
+        reference:
+          type: string
+          maxLength: 255
+          description: Free-form external reference.
+        description:
+          type: string
+          maxLength: 1024
+        status:
+          type: string
+          enum: [draft, posted]
+          default: posted
+          description: Create as draft to post later, or post atomically (default).
+        postings:
+          type: array
+          minItems: 2
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/Posting'
+          description: Must balance per asset (sum of debits == sum of credits).
+        effective_at:
+          type: string
+          format: date-time
+          description: Accounting effective date; defaults to creation time.
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    Transaction:
+      type: object
+      required: [id, ledger_id, idempotency_key, status, postings, metadata, reversed_by, reverses, effective_at, created_at, posted_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ledger_id:
+          type: string
+          format: uuid
+        idempotency_key:
+          type: string
+        reference:
+          type: string
+          description: Free-form external reference; omitted when empty.
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/TransactionStatus'
+        postings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Posting'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        reversed_by:
+          type: [string, 'null']
+          format: uuid
+          description: Id of the reversal transaction, when this one was reversed.
+        reverses:
+          type: [string, 'null']
+          format: uuid
+          description: Id of the original transaction, when this one is a reversal.
+        effective_at:
+          type: string
+          format: date-time
+          description: Accounting effective date; defaults to creation time.
+        created_at:
+          type: string
+          format: date-time
+        posted_at:
+          type: [string, 'null']
+          format: date-time
+
+    HoldCreate:
+      type: object
+      required: [account_id, idempotency_key, amount]
+      additionalProperties: false
+      properties:
+        ledger_id:
+          type: string
+          format: uuid
+          description: Optional; derived from the account when omitted.
+        account_id:
+          type: string
+          format: uuid
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 255
+        amount:
+          $ref: '#/components/schemas/Money'
+        expires_at:
+          type: string
+          format: date-time
+          description: When the hold auto-releases; defaults to 7 days.
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+
+    Hold:
+      type: object
+      required: [id, ledger_id, account_id, idempotency_key, amount, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ledger_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        idempotency_key:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        status:
+          $ref: '#/components/schemas/HoldStatus'
+        transaction_id:
+          type: [string, 'null']
+          format: uuid
+          description: The transaction created on capture; null otherwise.
+        expires_at:
+          type: string
+          format: date-time
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        created_at:
+          type: string
+          format: date-time
+
+    TrialBalance:
+      type: object
+      required: [ledger_id, as_of, rows, totals]
+      properties:
+        ledger_id:
+          type: string
+          format: uuid
+        as_of:
+          type: string
+          format: date-time
+        rows:
+          type: array
+          items:
+            type: object
+            required: [account_id, account_name, account_type, asset, debits, credits, net]
+            properties:
+              account_id:
+                type: string
+                format: uuid
+              account_name:
+                type: string
+              account_type:
+                $ref: '#/components/schemas/AccountType'
+              asset:
+                $ref: '#/components/schemas/AssetCode'
+              debits:
+                type: string
+                pattern: '^-?[0-9]{1,19}$'
+              credits:
+                type: string
+                pattern: '^-?[0-9]{1,19}$'
+              net:
+                type: string
+                pattern: '^-?[0-9]{1,19}$'
+                description: debits - credits, in minor units.
+        totals:
+          type: array
+          items:
+            type: object
+            required: [asset, debits, credits, balanced]
+            properties:
+              asset:
+                $ref: '#/components/schemas/AssetCode'
+              debits:
+                type: string
+                pattern: '^-?[0-9]{1,19}$'
+              credits:
+                type: string
+                pattern: '^-?[0-9]{1,19}$'
+              balanced:
+                type: boolean

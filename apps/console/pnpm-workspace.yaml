@@ -1,0 +1,10 @@
+# Standalone pnpm root for the console app.
+
+# Flat node_modules (no symlinks). Next.js standalone output tracing fails on
+# Windows without the symlink privilege (EPERM) when the isolated layout is
+# used. Hoisted works on every platform.
+nodeLinker: hoisted
+
+# sharp ships a native binary and needs its postinstall script approved.
+allowBuilds:
+  sharp: true

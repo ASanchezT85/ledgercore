@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: LedgerCore Reconciliation API
+  version: 1.0.0
+  description: |
+    Reconciles external statements (bank, PSP, provider) against a local
+    mirror of the ledger fed by `ledger.transaction.posted` events. Tenants
+    register sources, upload CSV statements, launch matching runs, triage
+    discrepancies and read a per-source report. Discrepancies also emit
+    `recon.discrepancy.detected` events.
+
+    All routes live under the `/v1/reconciliation` prefix (the gateway routes
+    that prefix to this service). The tenant is derived from the JWT.
+servers:
+  - url: http://localhost:8083
+    description: Local development (direct)
+  - url: http://localhost:8080
+    description: Local development (via gateway)
+security:
+  - bearerAuth: []
+tags:
+  - name: Sources
+  - name: Imports
+  - name: Runs
+  - name: Reports
+  - name: Discrepancies
+
+paths:
+  /v1/reconciliation/sources:
+    post:
+      operationId: createSource
+      tags: [Sources]
+      summary: Register an external source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceCreate'
+            examples:
+              bank:
+                value:
+                  name: chase-operating
+                  kind: bank
+      responses:
+        '201':
+          description: Source registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Source'
+              examples:
+                bank:
+                  value:
+                    id: d4e5f6a7-b8c9-7d0e-2f3a-4b5c6d7e8f9a
+                    name: chase-operating
+                    kind: bank
+                    created_at: '2026-07-24T12:00:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      operationId: listSources
+      tags: [Sources]
+      summary: List sources
+      responses:
+        '200':
+          description: All sources of the tenant (no pagination).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Source'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/reconciliation/imports:
+    post:
+      operationId: createImport
+      tags: [Imports]
+      summary: Import a CSV statement
+      description: |
+        Uploads a CSV statement as `multipart/form-data` (max 10 MiB) with
+        two fields:
+          - `source_id`: UUID of a registered source
+          - `file`: the CSV statement
+
+        Required CSV columns (any order, header row required):
+        `external_ref`, `amount`, `asset`, `occurred_at` (RFC 3339).
+        `amount` is a decimal string (e.g. `100.00`) converted to integer
+        minor units with an exponent of 2. The import is processed
+        synchronously; the response carries the final status.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [source_id, file]
+              properties:
+                source_id:
+                  type: string
+                  format: uuid
+                file:
+                  type: string
+                  format: binary
+                  description: CSV statement, max 10 MiB.
+      responses:
+        '201':
+          description: Import processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Import'
+              examples:
+                processed:
+                  value:
+                    id: c3d4e5f6-a7b8-7c9d-1e2f-3a4b5c6d7e8f
+                    source_id: d4e5f6a7-b8c9-7d0e-2f3a-4b5c6d7e8f9a
+                    filename: statement-2026-07-24.csv
+                    status: processed
+                    row_count: 1
+                    created_at: '2026-07-24T13:00:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/reconciliation/runs:
+    post:
+      operationId: createRun
+      tags: [Runs]
+      summary: Launch a reconciliation run
+      description: |
+        Runs the matcher for one source over all its imported statement rows
+        against the ledger mirror. The run executes synchronously.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id]
+              additionalProperties: false
+              properties:
+                source_id:
+                  type: string
+                  format: uuid
+            examples:
+              daily:
+                value:
+                  source_id: d4e5f6a7-b8c9-7d0e-2f3a-4b5c6d7e8f9a
+      responses:
+        '201':
+          description: Run executed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+              examples:
+                completed:
+                  value:
+                    id: e5f6a7b8-c9d0-7e1f-3a4b-5c6d7e8f9a0b
+                    source_id: d4e5f6a7-b8c9-7d0e-2f3a-4b5c6d7e8f9a
+                    status: completed
+                    matched_count: 118
+                    unmatched_count: 2
+                    started_at: '2026-07-24T14:00:00Z'
+                    finished_at: '2026-07-24T14:00:03Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/reconciliation/runs/{id}:
+    get:
+      operationId: getRun
+      tags: [Runs]
+      summary: Get a run
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/reconciliation/reports:
+    get:
+      operationId: getReports
+      tags: [Reports]
+      summary: Reconciliation report per source
+      description: One summary row per source, plus tenant-wide totals.
+      responses:
+        '200':
+          description: The report.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, totals]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SourceSummary'
+                  totals:
+                    type: object
+                    required: [matched, unmatched, disputed, open_discrepancies]
+                    properties:
+                      matched: { type: integer }
+                      unmatched: { type: integer }
+                      disputed: { type: integer }
+                      open_discrepancies: { type: integer }
+              examples:
+                report:
+                  value:
+                    data:
+                      - source_id: d4e5f6a7-b8c9-7d0e-2f3a-4b5c6d7e8f9a
+                        source_name: chase-operating
+                        matched: 118
+                        unmatched: 2
+                        disputed: 0
+                        open_discrepancies: 2
+                    totals:
+                      matched: 118
+                      unmatched: 2
+                      disputed: 0
+                      open_discrepancies: 2
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/reconciliation/discrepancies:
+    get:
+      operationId: listDiscrepancies
+      tags: [Discrepancies]
+      summary: List discrepancies
+      parameters:
+        - name: status
+          in: query
+          description: Filter by triage status; omit for all.
+          schema:
+            $ref: '#/components/schemas/DiscrepancyStatus'
+      responses:
+        '200':
+          description: Discrepancies (no pagination).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Discrepancy'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/reconciliation/discrepancies/{id}:
+    patch:
+      operationId: updateDiscrepancy
+      tags: [Discrepancies]
+      summary: Triage a discrepancy
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status:
+                  $ref: '#/components/schemas/DiscrepancyStatus'
+                resolution_note:
+                  type: string
+            examples:
+              resolve:
+                value:
+                  status: resolved
+                  resolution_note: duplicate wire, refunded by bank
+      responses:
+        '200':
+          description: Updated discrepancy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Discrepancy'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        EdDSA JWT issued by the identity service. Claims: `tenant_id` (UUID),
+        `env` (`sandbox` | `live`), `scopes` (string array).
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: |
+        Malformed request. Error codes used by this service:
+        `invalid_body`, `invalid_multipart`, `invalid_source_id`,
+        `missing_file`, `invalid_id`, `validation_error`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            validation:
+              value:
+                error:
+                  code: validation_error
+                  message: 'kind must be one of bank, psp, provider, manual'
+    Unauthorized:
+      description: Missing or invalid credentials (`missing_token`, `invalid_token`, `missing_tenant`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found for this tenant (`not_found`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code (snake_case).
+            message:
+              type: string
+
+    SourceKind:
+      type: string
+      enum: [bank, psp, provider, manual]
+
+    SourceCreate:
+      type: object
+      required: [name, kind]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        kind:
+          $ref: '#/components/schemas/SourceKind'
+
+    Source:
+      type: object
+      required: [id, name, kind, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          $ref: '#/components/schemas/SourceKind'
+        created_at:
+          type: string
+          format: date-time
+
+    Import:
+      type: object
+      required: [id, source_id, filename, status, row_count, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        status:
+          type: string
+          enum: [pending, processed, failed]
+        row_count:
+          type: integer
+        error:
+          type: string
+          description: Parse/processing error; present only when status is failed.
+        created_at:
+          type: string
+          format: date-time
+
+    Run:
+      type: object
+      required: [id, source_id, status, matched_count, unmatched_count, started_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        matched_count:
+          type: integer
+        unmatched_count:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: [string, 'null']
+          format: date-time
+
+    DiscrepancyStatus:
+      type: string
+      enum: [open, investigating, resolved]
+
+    Discrepancy:
+      type: object
+      required: [id, run_id, kind, details, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [missing_internal, missing_external, amount_mismatch, duplicate]
+          description: '`duplicate` is reserved for the v2 matcher; the current matcher never produces it.'
+        details:
+          type: object
+          description: Free-form context of the mismatch (external ref, amounts, etc.).
+        status:
+          $ref: '#/components/schemas/DiscrepancyStatus'
+        created_at:
+          type: string
+          format: date-time
+
+    SourceSummary:
+      type: object
+      required: [source_id, source_name, matched, unmatched, disputed, open_discrepancies]
+      properties:
+        source_id:
+          type: string
+          format: uuid
+        source_name:
+          type: string
+        matched:
+          type: integer
+        unmatched:
+          type: integer
+        disputed:
+          type: integer
+        open_discrepancies:
+          type: integer

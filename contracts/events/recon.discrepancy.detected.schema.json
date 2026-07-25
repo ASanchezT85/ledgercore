@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.ledgercore.dev/events/recon.discrepancy.detected.schema.json",
+  "title": "ReconDiscrepancyDetected",
+  "description": "Payload of recon.discrepancy.detected: a reconciliation run found a mismatch between an external source and the ledger.",
+  "type": "object",
+  "required": ["discrepancy_id", "run_id", "source_id", "kind", "asset", "amount", "detected_at"],
+  "properties": {
+    "discrepancy_id": { "type": "string", "format": "uuid" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "source_id": { "type": "string", "format": "uuid" },
+    "kind": {
+      "type": "string",
+      "enum": ["missing_in_ledger", "missing_in_source", "amount_mismatch"]
+    },
+    "external_id": {
+      "type": "string",
+      "description": "Statement row id on the external side, when applicable."
+    },
+    "transaction_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Ledger transaction involved, when applicable."
+    },
+    "asset": { "type": "string", "pattern": "^[A-Z0-9]{1,12}$" },
+    "amount": {
+      "type": "string",
+      "pattern": "^-?[0-9]{1,19}$",
+      "description": "Discrepancy amount in minor units, string-encoded."
+    },
+    "detail": { "type": "string", "maxLength": 1024 },
+    "detected_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "discrepancy_id": "f6a7b8c9-d0e1-7f2a-4b5c-6d7e8f9a0b1c",
+      "run_id": "e5f6a7b8-c9d0-7e1f-3a4b-5c6d7e8f9a0b",
+      "source_id": "d4e5f6a7-b8c9-7d0e-2f3a-4b5c6d7e8f9a",
+      "kind": "missing_in_ledger",
+      "external_id": "bank-tx-072",
+      "asset": "USD",
+      "amount": "5000",
+      "detail": "statement row has no matching ledger entry",
+      "detected_at": "2026-07-25T02:00:00Z"
+    }
+  ]
+}
