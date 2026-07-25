@@ -1,0 +1,87 @@
+# PUBLIC SANDBOX overlay (Fase 1a) — apply ON TOP of docker-compose.yml on
+# the VPS:
+#
+#   docker compose -f infra/compose/docker-compose.yml \
+#                  -f infra/compose/docker-compose.sandbox.yml \
+#                  --profile web up -d --build
+#
+# Required host environment (see docs/runbook-vps.md):
+#   LEDGERCORE_DOMAIN       public FQDN (e.g. sandbox.ledgercore.dev)
+#   LEDGERCORE_ADMIN_TOKEN  strong random token (openssl rand -hex 32)
+#   LEDGERCORE_ACME_EMAIL   email for Let's Encrypt registration
+#   POSTGRES_PASSWORD       strong random superuser password
+#
+# Hardening baked in (services refuse to start otherwise):
+#   - LEDGERCORE_ENV=sandbox-public in every Go service
+#   - JWT auth mandatory (AUTH_DISABLED=false everywhere)
+#   - identity rejects an empty or dev-default admin token
+#   - only the gateway publishes ports (80/443); no service or DB port,
+#     no Traefik dashboard
+#   - per-IP rate limits + HTTPS via Let's Encrypt (TLS challenge)
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set a strong postgres password}"
+    ports: !override []
+
+  nats:
+    ports: !override []
+
+  gateway:
+    command:
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=${LEDGERCORE_ACME_EMAIL:?set the ACME contact email}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      # No dashboard, no insecure API on a public host.
+    environment:
+      LEDGERCORE_DOMAIN: "${LEDGERCORE_DOMAIN:?set the public domain}"
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik-dynamic.sandbox.yml:/etc/traefik/dynamic.yml:ro
+      - letsencrypt_data:/letsencrypt
+
+  ledger-core:
+    environment:
+      LEDGERCORE_ENV: "sandbox-public"
+      LEDGERCORE_AUTH_DISABLED: "false"
+    ports: !override []
+
+  identity:
+    environment:
+      LEDGERCORE_ENV: "sandbox-public"
+      LEDGERCORE_AUTH_DISABLED: "false"
+      LEDGERCORE_ADMIN_TOKEN: "${LEDGERCORE_ADMIN_TOKEN:?set a strong admin token (openssl rand -hex 32)}"
+      LEDGERCORE_SANDBOX_SIGNUPS_PER_DAY: "${LEDGERCORE_SANDBOX_SIGNUPS_PER_DAY:-20}"
+      LEDGERCORE_SANDBOX_SWEEP_INTERVAL: "${LEDGERCORE_SANDBOX_SWEEP_INTERVAL:-1h}"
+    ports: !override []
+
+  reconciliation:
+    environment:
+      LEDGERCORE_ENV: "sandbox-public"
+      LEDGERCORE_AUTH_DISABLED: "false"
+    ports: !override []
+
+  webhooks:
+    environment:
+      LEDGERCORE_ENV: "sandbox-public"
+      LEDGERCORE_AUTH_DISABLED: "false"
+    ports: !override []
+
+  console:
+    environment:
+      # Server-side fetches go through the internal gateway port; the
+      # browser talks to the public domain (same origin, /v1/*).
+      NEXT_PUBLIC_API_URL: "https://${LEDGERCORE_DOMAIN:?set the public domain}"
+    ports: !override []
+
+volumes:
+  letsencrypt_data:

@@ -1,0 +1,93 @@
+# Routing table for the PUBLIC SANDBOX gateway (VPS deploy, Fase 1a).
+#
+# Differences vs the dev file:
+#   - every router terminates TLS on the websecure entrypoint with the
+#     Let's Encrypt resolver (the resolver itself is declared as static
+#     configuration in docker-compose.sandbox.yml);
+#   - the host is taken from the LEDGERCORE_DOMAIN env var (this file is a
+#     Traefik Go template: the env function is evaluated at load time);
+#   - rate limits are the hardening gate for an internet-facing deploy.
+http:
+  middlewares:
+    ratelimit-global:
+      rateLimit:
+        average: 20
+        burst: 40
+    ratelimit-signup:
+      rateLimit:
+        average: 5
+        period: 1m
+        burst: 3
+
+  routers:
+    sandbox-signup:
+      entryPoints: [websecure]
+      rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`) && PathPrefix(`/v1/sandbox/signups`)'
+      priority: 200
+      middlewares: [ratelimit-signup]
+      service: identity
+      tls:
+        certResolver: letsencrypt
+    identity:
+      entryPoints: [websecure]
+      rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`) && (PathPrefix(`/v1/auth`) || PathPrefix(`/v1/tenants`) || PathPrefix(`/v1/api-keys`) || PathPrefix(`/v1/sandbox`) || PathPrefix(`/.well-known`))'
+      priority: 100
+      middlewares: [ratelimit-global]
+      service: identity
+      tls:
+        certResolver: letsencrypt
+    reconciliation:
+      entryPoints: [websecure]
+      rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`) && PathPrefix(`/v1/reconciliation`)'
+      priority: 100
+      middlewares: [ratelimit-global]
+      service: reconciliation
+      tls:
+        certResolver: letsencrypt
+    webhooks:
+      entryPoints: [websecure]
+      rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`) && (PathPrefix(`/v1/webhook-subscriptions`) || PathPrefix(`/v1/webhook-deliveries`))'
+      priority: 100
+      middlewares: [ratelimit-global]
+      service: webhooks
+      tls:
+        certResolver: letsencrypt
+    ledger-core:
+      entryPoints: [websecure]
+      rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`) && PathPrefix(`/v1`)'
+      priority: 1
+      middlewares: [ratelimit-global]
+      service: ledger-core
+      tls:
+        certResolver: letsencrypt
+    # The console (signup page + demo UI) answers everything else on the host.
+    console:
+      entryPoints: [websecure]
+      rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`)'
+      priority: 1
+      middlewares: [ratelimit-global]
+      service: console
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    identity:
+      loadBalancer:
+        servers:
+          - url: "http://identity:8082"
+    reconciliation:
+      loadBalancer:
+        servers:
+          - url: "http://reconciliation:8083"
+    webhooks:
+      loadBalancer:
+        servers:
+          - url: "http://webhooks:8084"
+    ledger-core:
+      loadBalancer:
+        servers:
+          - url: "http://ledger-core:8081"
+    console:
+      loadBalancer:
+        servers:
+          - url: "http://console:3000"

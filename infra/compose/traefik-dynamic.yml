@@ -5,27 +5,54 @@
 # file mirrors exactly the routing the compose labels used to declare:
 # specific prefixes win with priority 100; ledger-core catches the rest
 # of /v1 at priority 1.
+#
+# Rate limiting (Fase 1a hardening): every router carries a per-IP global
+# limit; the public sandbox signup endpoint gets its own, much stricter
+# bucket (it is the only unauthenticated write on the platform).
 http:
+  middlewares:
+    ratelimit-global:
+      rateLimit:
+        # ~20 req/s sustained per client IP, bursts up to 40.
+        average: 20
+        burst: 40
+    ratelimit-signup:
+      rateLimit:
+        # 5 signup attempts per minute per client IP, bursts up to 3.
+        average: 5
+        period: 1m
+        burst: 3
+
   routers:
+    sandbox-signup:
+      entryPoints: [web]
+      rule: "PathPrefix(`/v1/sandbox/signups`)"
+      priority: 200
+      middlewares: [ratelimit-signup]
+      service: identity
     identity:
       entryPoints: [web]
-      rule: "PathPrefix(`/v1/auth`) || PathPrefix(`/v1/tenants`) || PathPrefix(`/v1/api-keys`) || PathPrefix(`/.well-known`)"
+      rule: "PathPrefix(`/v1/auth`) || PathPrefix(`/v1/tenants`) || PathPrefix(`/v1/api-keys`) || PathPrefix(`/v1/sandbox`) || PathPrefix(`/.well-known`)"
       priority: 100
+      middlewares: [ratelimit-global]
       service: identity
     reconciliation:
       entryPoints: [web]
       rule: "PathPrefix(`/v1/reconciliation`)"
       priority: 100
+      middlewares: [ratelimit-global]
       service: reconciliation
     webhooks:
       entryPoints: [web]
       rule: "PathPrefix(`/v1/webhook-subscriptions`) || PathPrefix(`/v1/webhook-deliveries`)"
       priority: 100
+      middlewares: [ratelimit-global]
       service: webhooks
     ledger-core:
       entryPoints: [web]
       rule: "PathPrefix(`/v1`)"
       priority: 1
+      middlewares: [ratelimit-global]
       service: ledger-core
 
   services:
