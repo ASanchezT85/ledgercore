@@ -40,6 +40,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Vulnerability scan (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   # Mandatory anti-leak gate (blueprint §14, Fase 1a): the RLS contract test
   # runs against a real Postgres provisioned exactly like production (app
   # role with NOBYPASSRLS + per-service schemas + goose migrations). No
