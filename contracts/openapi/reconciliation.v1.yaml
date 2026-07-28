@@ -62,19 +62,25 @@ paths:
       operationId: listSources
       tags: [Sources]
       summary: List sources
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
       responses:
         '200':
-          description: All sources of the tenant (no pagination).
+          description: Page of the tenant's sources, newest first.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, next_cursor]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Source'
+                  next_cursor:
+                    $ref: '#/components/schemas/NextCursor'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /v1/reconciliation/imports:
@@ -245,19 +251,23 @@ paths:
           description: Filter by triage status; omit for all.
           schema:
             $ref: '#/components/schemas/DiscrepancyStatus'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
       responses:
         '200':
-          description: Discrepancies (no pagination).
+          description: Page of discrepancies, newest first.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, next_cursor]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Discrepancy'
+                  next_cursor:
+                    $ref: '#/components/schemas/NextCursor'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
@@ -318,10 +328,7 @@ components:
 
   responses:
     BadRequest:
-      description: |
-        Malformed request. Error codes used by this service:
-        `invalid_body`, `invalid_multipart`, `invalid_source_id`,
-        `missing_file`, `invalid_id`, `validation_error`.
+      description: Invalid input (`validation_failed`) or malformed pagination cursor (`invalid_cursor`).
       content:
         application/json:
           schema:
@@ -330,10 +337,11 @@ components:
             validation:
               value:
                 error:
-                  code: validation_error
+                  code: validation_failed
                   message: 'kind must be one of bank, psp, provider, manual'
+                  request_id: 9f1b2c3d4e5f60718293a4b5c6d7e8f9
     Unauthorized:
-      description: Missing or invalid credentials (`missing_token`, `invalid_token`, `missing_tenant`).
+      description: Missing or invalid credentials (`unauthorized`).
       content:
         application/json:
           schema:
@@ -345,6 +353,25 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
 
+  parameters:
+    PageLimit:
+      name: limit
+      in: query
+      description: Page size; values above 200 are clamped to 200.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    PageCursor:
+      name: cursor
+      in: query
+      description: |
+        Opaque keyset cursor from a previous page's next_cursor. A malformed
+        cursor yields 400 invalid_cursor.
+      schema:
+        type: string
+
   schemas:
     Error:
       type: object
@@ -352,13 +379,27 @@ components:
       properties:
         error:
           type: object
-          required: [code, message]
+          required: [code, message, request_id]
           properties:
             code:
               type: string
-              description: Stable machine-readable error code (snake_case).
+              description: |
+                Stable machine-readable error code (snake_case). Catalog:
+                validation_failed, invalid_cursor, unauthorized, forbidden,
+                not_found, conflict, idempotency_conflict,
+                unbalanced_transaction, insufficient_funds, rate_limited,
+                service_unavailable, internal.
             message:
               type: string
+            request_id:
+              type: string
+              description: Correlation id of the request (also in X-Request-Id).
+
+    NextCursor:
+      type: [string, 'null']
+      description: |
+        Opaque cursor for the next page; null when there are no more
+        results (the last page never requires an extra empty fetch).
 
     SourceKind:
       type: string

@@ -19,6 +19,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 )
 
 // Environment values carried in tokens.
@@ -202,12 +203,12 @@ func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Hand
 			if authDisabled {
 				raw := r.Header.Get("X-Tenant-Id")
 				if raw == "" {
-					writeAuthError(w, http.StatusUnauthorized, "missing_tenant", "X-Tenant-Id header is required when auth is disabled")
+					writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "X-Tenant-Id header is required when auth is disabled")
 					return
 				}
 				tenantID, err := uuid.Parse(raw)
 				if err != nil {
-					writeAuthError(w, http.StatusUnauthorized, "invalid_tenant", "X-Tenant-Id must be a valid UUID")
+					writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "X-Tenant-Id must be a valid UUID")
 					return
 				}
 				claims := Claims{
@@ -223,7 +224,7 @@ func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Hand
 			authz := r.Header.Get("Authorization")
 			const prefix = "Bearer "
 			if !strings.HasPrefix(authz, prefix) {
-				writeAuthError(w, http.StatusUnauthorized, "missing_token", "Authorization: Bearer token is required")
+				writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "Authorization: Bearer token is required")
 				return
 			}
 			tokenString := strings.TrimSpace(authz[len(prefix):])
@@ -237,17 +238,17 @@ func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Hand
 				return cache.key(kid)
 			}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}), jwt.WithExpirationRequired())
 			if err != nil || !token.Valid {
-				writeAuthError(w, http.StatusUnauthorized, "invalid_token", "token is invalid or expired")
+				writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "token is invalid or expired")
 				return
 			}
 
 			tenantID, err := uuid.Parse(tc.TenantID)
 			if err != nil {
-				writeAuthError(w, http.StatusUnauthorized, "invalid_token", "token tenant_id claim is not a UUID")
+				writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "token tenant_id claim is not a UUID")
 				return
 			}
 			if tc.Environment != EnvSandbox && tc.Environment != EnvLive {
-				writeAuthError(w, http.StatusUnauthorized, "invalid_token", "token env claim must be sandbox or live")
+				writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "token env claim must be sandbox or live")
 				return
 			}
 
@@ -262,10 +263,8 @@ func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Hand
 	}
 }
 
-func writeAuthError(w http.ResponseWriter, status int, code, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]string{"code": code, "message": msg},
-	})
+// writeAuthError emits the platform error contract via httpx so the shape
+// ({"error":{"code","message","request_id"}}) stays single-sourced.
+func writeAuthError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
+	httpx.WriteError(w, r, status, code, msg)
 }

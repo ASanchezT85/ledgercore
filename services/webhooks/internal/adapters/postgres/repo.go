@@ -29,11 +29,12 @@ type Repo struct {
 // NewRepo builds the repository on top of a pool pinned to the webhooks schema.
 func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
-const subscriptionColumns = "id, tenant_id, url, secret, event_types, active, created_at"
+const subscriptionColumns = "id, tenant_id, url, secret, event_types, active, created_at, previous_secret, previous_secret_expires_at"
 
 func scanSubscription(row pgx.Row) (domain.Subscription, error) {
 	var s domain.Subscription
-	err := row.Scan(&s.ID, &s.TenantID, &s.URL, &s.Secret, &s.EventTypes, &s.Active, &s.CreatedAt)
+	err := row.Scan(&s.ID, &s.TenantID, &s.URL, &s.Secret, &s.EventTypes, &s.Active, &s.CreatedAt,
+		&s.PreviousSecret, &s.PreviousSecretExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Subscription{}, domain.ErrNotFound
 	}
@@ -56,26 +57,30 @@ func (r *Repo) Create(ctx context.Context, sub domain.Subscription) error {
 	})
 }
 
-// List returns every subscription of the tenant, oldest first.
-func (r *Repo) List(ctx context.Context, tenantID uuid.UUID) ([]domain.Subscription, error) {
-	return r.listSubscriptions(ctx, tenantID, false)
+// List returns a keyset page of the tenant's subscriptions, newest first.
+func (r *Repo) List(ctx context.Context, tenantID uuid.UUID, limit int, cursor httpx.Cursor) ([]domain.Subscription, error) {
+	q := "SELECT " + subscriptionColumns + ` FROM subscriptions
+		WHERE tenant_id = $1
+		  AND ($2::timestamptz IS NULL OR (created_at, id) < ($2, $3::uuid))
+		ORDER BY created_at DESC, id DESC
+		LIMIT $4`
+	var cAt, cID any
+	if !cursor.IsZero() {
+		cAt, cID = cursor.CreatedAt, cursor.ID
+	}
+	return r.querySubscriptions(ctx, tenantID, q, tenantID, cAt, cID, limit)
 }
 
 // ListActive returns only active subscriptions of the tenant.
 func (r *Repo) ListActive(ctx context.Context, tenantID uuid.UUID) ([]domain.Subscription, error) {
-	return r.listSubscriptions(ctx, tenantID, true)
+	q := "SELECT " + subscriptionColumns + " FROM subscriptions WHERE tenant_id = $1 AND active ORDER BY created_at, id"
+	return r.querySubscriptions(ctx, tenantID, q, tenantID)
 }
 
-func (r *Repo) listSubscriptions(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]domain.Subscription, error) {
-	q := "SELECT " + subscriptionColumns + " FROM subscriptions WHERE tenant_id = $1"
-	if activeOnly {
-		q += " AND active"
-	}
-	q += " ORDER BY created_at, id"
-
+func (r *Repo) querySubscriptions(ctx context.Context, tenantID uuid.UUID, q string, args ...any) ([]domain.Subscription, error) {
 	var out []domain.Subscription
 	err := pgxutil.WithTenantTx(ctx, r.pool, tenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, q, tenantID)
+		rows, err := tx.Query(ctx, q, args...)
 		if err != nil {
 			return err
 		}
@@ -144,11 +149,16 @@ func (r *Repo) Update(ctx context.Context, tenantID, id uuid.UUID, url *string, 
 	return out, err
 }
 
-// UpdateSecret replaces the signing secret.
-func (r *Repo) UpdateSecret(ctx context.Context, tenantID, id uuid.UUID, secret string) error {
+// RotateSecret installs a new signing secret, keeping the old one as
+// previous_secret until prevExpiresAt so in-flight receivers keep verifying.
+func (r *Repo) RotateSecret(ctx context.Context, tenantID, id uuid.UUID, secret string, prevExpiresAt time.Time) error {
 	return pgxutil.WithTenantTx(ctx, r.pool, tenantID, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx,
-			"UPDATE subscriptions SET secret = $1 WHERE id = $2 AND tenant_id = $3", secret, id, tenantID)
+		tag, err := tx.Exec(ctx, `
+			UPDATE subscriptions
+			SET previous_secret = secret,
+			    previous_secret_expires_at = $1,
+			    secret = $2
+			WHERE id = $3 AND tenant_id = $4`, prevExpiresAt, secret, id, tenantID)
 		if err != nil {
 			return err
 		}
@@ -157,6 +167,27 @@ func (r *Repo) UpdateSecret(ctx context.Context, tenantID, id uuid.UUID, secret 
 		}
 		return nil
 	})
+}
+
+// PurgeExpiredPreviousSecrets clears previous secrets whose grace window has
+// passed, across all tenants (system transaction). Returns the rows cleaned.
+func (r *Repo) PurgeExpiredPreviousSecrets(ctx context.Context) (int64, error) {
+	var n int64
+	err := pgxutil.WithSystemTx(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE subscriptions
+			SET previous_secret = NULL, previous_secret_expires_at = NULL
+			WHERE previous_secret IS NOT NULL AND previous_secret_expires_at <= now()`)
+		if err != nil {
+			return err
+		}
+		n = tag.RowsAffected()
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("postgres: purge expired previous secrets: %w", err)
+	}
+	return n, nil
 }
 
 // ---- app.DeliveryStore -------------------------------------------------------------
@@ -279,7 +310,8 @@ func (r *Repo) ClaimDue(ctx context.Context, limit int, lease time.Duration) ([]
 	var out []domain.ClaimedDelivery
 	err := pgxutil.WithSystemTx(ctx, r.pool, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
-			SELECT d.id, d.tenant_id, d.subscription_id, d.event_id, d.event_type, d.payload, d.attempts, s.url, s.secret
+			SELECT d.id, d.tenant_id, d.subscription_id, d.event_id, d.event_type, d.payload, d.attempts, s.url, s.secret,
+				       s.previous_secret, s.previous_secret_expires_at
 			FROM deliveries d
 			JOIN subscriptions s ON s.id = d.subscription_id
 			WHERE d.status IN ('pending', 'failed')
@@ -295,7 +327,8 @@ func (r *Repo) ClaimDue(ctx context.Context, limit int, lease time.Duration) ([]
 		for rows.Next() {
 			var c domain.ClaimedDelivery
 			if err := rows.Scan(&c.ID, &c.TenantID, &c.SubscriptionID, &c.EventID, &c.EventType,
-				&c.Payload, &c.Attempts, &c.URL, &c.Secret); err != nil {
+				&c.Payload, &c.Attempts, &c.URL, &c.Secret,
+				&c.PreviousSecret, &c.PreviousSecretExpiresAt); err != nil {
 				return err
 			}
 			out = append(out, c)

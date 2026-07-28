@@ -51,7 +51,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	if err := s.pool.Ping(ctx); err != nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "not_ready", "database is unreachable")
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "database is unreachable")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})

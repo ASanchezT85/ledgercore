@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
 )
@@ -79,7 +80,7 @@ func TestStoreIntegration(t *testing.T) {
 	if _, err := store.GetTenant(ctx, uuid.New()); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing tenant: got %v, want ErrNotFound", err)
 	}
-	tenants, err := store.ListTenants(ctx)
+	tenants, err := store.ListTenants(ctx, 50, httpx.Cursor{})
 	if err != nil || len(tenants) == 0 {
 		t.Errorf("list tenants: len=%d err=%v", len(tenants), err)
 	}

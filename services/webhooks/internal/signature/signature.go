@@ -46,7 +46,20 @@ func Sign(secret string, t int64, body []byte) string {
 
 // Header builds the full signature header value: "t=<t>,v1=<signature>".
 func Header(secret string, t int64, body []byte) string {
-	return fmt.Sprintf("t=%d,%s=%s", t, SchemeV1, Sign(secret, t, body))
+	return HeaderMulti([]string{secret}, t, body)
+}
+
+// HeaderMulti builds a signature header carrying one v1 entry per secret:
+// "t=<t>,v1=<sig1>[,v1=<sig2>]". During a secret rotation the sender signs
+// with both the new and the previous secret, so a receiver verifying against
+// either one finds a matching entry.
+func HeaderMulti(secrets []string, t int64, body []byte) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "t=%d", t)
+	for _, s := range secrets {
+		fmt.Fprintf(&b, ",%s=%s", SchemeV1, Sign(s, t, body))
+	}
+	return b.String()
 }
 
 // Verify checks a received header against the body using time.Now as the

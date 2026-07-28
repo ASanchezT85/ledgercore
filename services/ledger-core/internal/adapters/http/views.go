@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/libs/go/money"
 
 	"github.com/ledgercore/ledgercore/services/ledger-core/internal/domain"
@@ -326,9 +327,13 @@ func newStatementView(st domain.Statement, limit int) statementView {
 		Period:         statementPeriodView{From: st.From, To: st.To},
 		OpeningBalance: newAssetBalanceViews(st.Opening),
 		ClosingBalance: newAssetBalanceViews(st.Closing),
-		Entries:        make([]statementEntryView, len(st.Entries)),
 	}
-	for i, e := range st.Entries {
+	entries, next := httpx.Window(st.Entries, limit, func(e domain.StatementEntry) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: e.EffectiveAt, ID: e.PostingID}
+	})
+	out.NextCursor = next
+	out.Entries = make([]statementEntryView, len(entries))
+	for i, e := range entries {
 		out.Entries[i] = statementEntryView{
 			ID:             e.PostingID,
 			TransactionID:  e.TransactionID,
@@ -338,10 +343,6 @@ func newStatementView(st domain.Statement, limit int) statementView {
 			EffectiveAt:    e.EffectiveAt,
 			RunningBalance: strconv.FormatInt(e.Running, 10),
 		}
-	}
-	if n := len(st.Entries); n > 0 {
-		last := st.Entries[n-1]
-		out.NextCursor = nextCursor(n, limit, last.EffectiveAt, last.PostingID)
 	}
 	return out
 }

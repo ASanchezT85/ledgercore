@@ -33,7 +33,7 @@ type handler struct {
 func (h *handler) tenant(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	tenantID, ok := ident.TenantFromContext(r.Context())
 	if !ok || tenantID == uuid.Nil {
-		httpx.WriteError(w, http.StatusUnauthorized, "missing_tenant", "request has no tenant context")
+		httpx.WriteError(w, r, http.StatusUnauthorized, httpx.CodeUnauthorized, "request has no tenant context")
 		return uuid.Nil, false
 	}
 	return tenantID, true
@@ -42,48 +42,31 @@ func (h *handler) tenant(w http.ResponseWriter, r *http.Request) (uuid.UUID, boo
 func pathID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "path id must be a valid UUID")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "path id must be a valid UUID")
 		return uuid.Nil, false
 	}
 	return id, true
 }
 
-func parsePage(w http.ResponseWriter, r *http.Request) (app.Page, bool) {
-	page := app.Page{Limit: 25}
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > 100 {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request", "limit must be an integer between 1 and 100")
-			return app.Page{}, false
-		}
-		page.Limit = n
+// parsePage reads the uniform ?limit=/?cursor= parameters. The returned
+// app.Page asks the store for limit+1 rows so the handler can tell whether a
+// next page exists without a second query; the second return value is the
+// page size actually exposed to the client.
+func parsePage(w http.ResponseWriter, r *http.Request) (app.Page, int, bool) {
+	pr, ok := httpx.ParsePage(w, r)
+	if !ok {
+		return app.Page{}, 0, false
 	}
-	cursor, err := httpx.DecodeCursor(r.URL.Query().Get("cursor"))
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "cursor is invalid")
-		return app.Page{}, false
-	}
-	page.Cursor = cursor
-	return page, true
+	return app.Page{Cursor: pr.Cursor, Limit: pr.FetchLimit()}, pr.Limit, true
 }
 
-// nextCursor encodes the keyset cursor for the next page, or nil when the
-// current page was not full.
-func nextCursor(count, limit int, lastCreatedAt time.Time, lastID uuid.UUID) *string {
-	if count < limit {
-		return nil
-	}
-	c := httpx.Cursor{CreatedAt: lastCreatedAt, ID: lastID}.Encode()
-	return &c
-}
-
-func optionalUUID(w http.ResponseWriter, raw, name string) (*uuid.UUID, bool) {
+func optionalUUID(w http.ResponseWriter, r *http.Request, raw, name string) (*uuid.UUID, bool) {
 	if raw == "" {
 		return nil, true
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", name+" must be a valid UUID")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, name+" must be a valid UUID")
 		return nil, false
 	}
 	return &id, true
@@ -95,21 +78,21 @@ func optionalUUID(w http.ResponseWriter, raw, name string) (*uuid.UUID, bool) {
 func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, app.ErrNotFound):
-		httpx.WriteError(w, http.StatusNotFound, "not_found", "resource not found")
+		httpx.WriteError(w, r, http.StatusNotFound, httpx.CodeNotFound, "resource not found")
 	case errors.Is(err, app.ErrConflict):
-		httpx.WriteError(w, http.StatusConflict, "conflict", "a resource with those unique attributes already exists")
+		httpx.WriteError(w, r, http.StatusConflict, httpx.CodeConflict, "a resource with those unique attributes already exists")
 	case errors.Is(err, app.ErrInvalidState):
-		httpx.WriteError(w, http.StatusConflict, "invalid_state", trimSentinel(err.Error()))
+		httpx.WriteError(w, r, http.StatusConflict, httpx.CodeConflict, trimSentinel(err.Error()))
 	case errors.Is(err, app.ErrInsufficientFunds):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "insufficient_funds", trimSentinel(err.Error()))
+		httpx.WriteError(w, r, http.StatusUnprocessableEntity, httpx.CodeInsufficientFunds, trimSentinel(err.Error()))
 	case errors.Is(err, domain.ErrUnbalanced), errors.Is(err, money.ErrOverflow):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "unbalanced_transaction", err.Error())
+		httpx.WriteError(w, r, http.StatusUnprocessableEntity, httpx.CodeUnbalancedTransaction, err.Error())
 	case errors.Is(err, domain.ErrTooFewPostings),
 		errors.Is(err, domain.ErrNonPositiveAmount),
 		errors.Is(err, domain.ErrInvalidDirection),
 		errors.Is(err, money.ErrInvalidAsset),
 		errors.Is(err, app.ErrValidation):
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", trimSentinel(err.Error()))
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, trimSentinel(err.Error()))
 	default:
 		slog.Error("unhandled request error",
 			"error", err,
@@ -117,7 +100,7 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 			"path", r.URL.Path,
 			"request_id", httpx.RequestIDFromContext(r.Context()),
 		)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+		httpx.WriteError(w, r, http.StatusInternalServerError, httpx.CodeInternal, "an internal error occurred")
 	}
 }
 
@@ -146,7 +129,7 @@ func (h *handler) createLedger(w http.ResponseWriter, r *http.Request) {
 	}
 	var req createLedgerRequest
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	claims, _ := ident.ClaimsFromContext(r.Context())
@@ -168,7 +151,7 @@ func (h *handler) listLedgers(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, ok := parsePage(w, r)
+	page, limit, ok := parsePage(w, r)
 	if !ok {
 		return
 	}
@@ -177,13 +160,12 @@ func (h *handler) listLedgers(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	resp := listResponse[ledgerView]{Data: make([]ledgerView, len(ledgers))}
+	ledgers, next := httpx.Window(ledgers, limit, func(l domain.Ledger) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: l.CreatedAt, ID: l.ID}
+	})
+	resp := listResponse[ledgerView]{Data: make([]ledgerView, len(ledgers)), NextCursor: next}
 	for i, l := range ledgers {
 		resp.Data[i] = newLedgerView(l)
-	}
-	if n := len(ledgers); n > 0 {
-		last := ledgers[n-1]
-		resp.NextCursor = nextCursor(n, page.Limit, last.CreatedAt, last.ID)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -222,12 +204,12 @@ func (h *handler) createAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	var req createAccountRequest
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	nb, valid := normalBalanceIn(req.NormalBalance)
 	if !valid {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "normal_balance must be DEBIT or CREDIT")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "normal_balance must be DEBIT or CREDIT")
 		return
 	}
 	a, err := h.svc.CreateAccount(r.Context(), tenantID, app.CreateAccountInput{
@@ -249,12 +231,12 @@ func (h *handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, ok := parsePage(w, r)
+	page, limit, ok := parsePage(w, r)
 	if !ok {
 		return
 	}
 	filter := app.AccountFilter{}
-	ledgerID, ok := optionalUUID(w, r.URL.Query().Get("ledger_id"), "ledger_id")
+	ledgerID, ok := optionalUUID(w, r, r.URL.Query().Get("ledger_id"), "ledger_id")
 	if !ok {
 		return
 	}
@@ -262,7 +244,7 @@ func (h *handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("type"); raw != "" {
 		t := domain.AccountType(strings.ToLower(raw))
 		if !t.Valid() {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request", "type must be one of asset|liability|equity|revenue|expense")
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "type must be one of asset|liability|equity|revenue|expense")
 			return
 		}
 		filter.Type = &t
@@ -272,13 +254,12 @@ func (h *handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	resp := listResponse[accountView]{Data: make([]accountView, len(accounts))}
+	accounts, next := httpx.Window(accounts, limit, func(a domain.Account) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: a.CreatedAt, ID: a.ID}
+	})
+	resp := listResponse[accountView]{Data: make([]accountView, len(accounts)), NextCursor: next}
 	for i, a := range accounts {
 		resp.Data[i] = newAccountView(a)
-	}
-	if n := len(accounts); n > 0 {
-		last := accounts[n-1]
-		resp.NextCursor = nextCursor(n, page.Limit, last.CreatedAt, last.ID)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -330,7 +311,7 @@ func (h *handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, ok := parsePage(w, r)
+	page, limit, ok := parsePage(w, r)
 	if !ok {
 		return
 	}
@@ -339,13 +320,12 @@ func (h *handler) listEntries(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	resp := listResponse[entryView]{Data: make([]entryView, len(entries))}
+	entries, next := httpx.Window(entries, limit, func(e domain.Entry) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: e.CreatedAt, ID: e.ID}
+	})
+	resp := listResponse[entryView]{Data: make([]entryView, len(entries)), NextCursor: next}
 	for i, e := range entries {
 		resp.Data[i] = newEntryView(e)
-	}
-	if n := len(entries); n > 0 {
-		last := entries[n-1]
-		resp.NextCursor = nextCursor(n, page.Limit, last.CreatedAt, last.ID)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -376,7 +356,7 @@ func (h *handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	var req createTransactionRequest
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	if req.IdempotencyKey == "" {
@@ -396,7 +376,7 @@ func (h *handler) createTransaction(w http.ResponseWriter, r *http.Request) {
 	for i, p := range req.Postings {
 		amount, err := p.Amount.toAmount()
 		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request",
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed,
 				"postings["+strconv.Itoa(i)+"].amount.amount must be a string-encoded integer")
 			return
 		}
@@ -424,12 +404,12 @@ func (h *handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, ok := parsePage(w, r)
+	page, limit, ok := parsePage(w, r)
 	if !ok {
 		return
 	}
 	filter := app.TransactionFilter{}
-	ledgerID, ok := optionalUUID(w, r.URL.Query().Get("ledger_id"), "ledger_id")
+	ledgerID, ok := optionalUUID(w, r, r.URL.Query().Get("ledger_id"), "ledger_id")
 	if !ok {
 		return
 	}
@@ -437,7 +417,7 @@ func (h *handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("status"); raw != "" {
 		s := domain.TransactionStatus(strings.ToLower(raw))
 		if s != domain.TransactionDraft && s != domain.TransactionPosted && s != domain.TransactionReversed {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request", "status must be draft, posted or reversed")
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "status must be draft, posted or reversed")
 			return
 		}
 		filter.Status = &s
@@ -447,13 +427,12 @@ func (h *handler) listTransactions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	resp := listResponse[transactionView]{Data: make([]transactionView, len(txs))}
+	txs, next := httpx.Window(txs, limit, func(t domain.Transaction) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: t.CreatedAt, ID: t.ID}
+	})
+	resp := listResponse[transactionView]{Data: make([]transactionView, len(txs)), NextCursor: next}
 	for i, t := range txs {
 		resp.Data[i] = newTransactionView(t)
-	}
-	if n := len(txs); n > 0 {
-		last := txs[n-1]
-		resp.NextCursor = nextCursor(n, page.Limit, last.CreatedAt, last.ID)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -509,7 +488,7 @@ func (h *handler) reverseTransaction(w http.ResponseWriter, r *http.Request) {
 	var req reverseTransactionRequest
 	if r.ContentLength != 0 {
 		if err := httpx.DecodeJSON(w, r, &req); err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 			return
 		}
 	}
@@ -542,12 +521,12 @@ func (h *handler) createHold(w http.ResponseWriter, r *http.Request) {
 	}
 	var req createHoldRequest
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	amount, err := req.Amount.toAmount()
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "amount.amount must be a string-encoded integer")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "amount.amount must be a string-encoded integer")
 		return
 	}
 	in := app.CreateHoldInput{
@@ -607,7 +586,7 @@ func (h *handler) captureHold(w http.ResponseWriter, r *http.Request) {
 	var req captureHoldRequest
 	if r.ContentLength != 0 {
 		if err := httpx.DecodeJSON(w, r, &req); err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request", err.Error())
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 			return
 		}
 	}
@@ -615,7 +594,7 @@ func (h *handler) captureHold(w http.ResponseWriter, r *http.Request) {
 	if req.Amount != nil {
 		amount, err := req.Amount.toAmount()
 		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, "bad_request", "amount.amount must be a string-encoded integer")
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "amount.amount must be a string-encoded integer")
 			return
 		}
 		in.Amount = &amount
@@ -648,13 +627,13 @@ func (h *handler) releaseHold(w http.ResponseWriter, r *http.Request) {
 // ---- reports ---------------------------------------------------------------------
 
 // optionalTime parses an RFC 3339 query parameter, zero when absent.
-func optionalTime(w http.ResponseWriter, raw, name string) (time.Time, bool) {
+func optionalTime(w http.ResponseWriter, r *http.Request, raw, name string) (time.Time, bool) {
 	if raw == "" {
 		return time.Time{}, true
 	}
 	t, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", name+" must be an RFC 3339 date-time")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, name+" must be an RFC 3339 date-time")
 		return time.Time{}, false
 	}
 	return t, true
@@ -667,11 +646,11 @@ func (h *handler) trialBalance(w http.ResponseWriter, r *http.Request) {
 	}
 	ledgerID, err := uuid.Parse(r.URL.Query().Get("ledger_id"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "ledger_id query parameter is required and must be a UUID")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "ledger_id query parameter is required and must be a UUID")
 		return
 	}
 	var asOf *time.Time
-	t, ok := optionalTime(w, r.URL.Query().Get("as_of"), "as_of")
+	t, ok := optionalTime(w, r, r.URL.Query().Get("as_of"), "as_of")
 	if !ok {
 		return
 	}
@@ -693,18 +672,18 @@ func (h *handler) statement(w http.ResponseWriter, r *http.Request) {
 	}
 	accountID, err := uuid.Parse(r.URL.Query().Get("account_id"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "account_id query parameter is required and must be a UUID")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "account_id query parameter is required and must be a UUID")
 		return
 	}
-	from, ok := optionalTime(w, r.URL.Query().Get("from"), "from")
+	from, ok := optionalTime(w, r, r.URL.Query().Get("from"), "from")
 	if !ok {
 		return
 	}
-	to, ok := optionalTime(w, r.URL.Query().Get("to"), "to")
+	to, ok := optionalTime(w, r, r.URL.Query().Get("to"), "to")
 	if !ok {
 		return
 	}
-	page, ok := parsePage(w, r)
+	page, limit, ok := parsePage(w, r)
 	if !ok {
 		return
 	}
@@ -713,7 +692,7 @@ func (h *handler) statement(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newStatementView(st, page.Limit))
+	httpx.WriteJSON(w, http.StatusOK, newStatementView(st, limit))
 }
 
 func (h *handler) providerPositions(w http.ResponseWriter, r *http.Request) {

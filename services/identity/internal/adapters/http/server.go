@@ -21,7 +21,7 @@ import (
 type IdentityService interface {
 	CreateTenant(ctx context.Context, name, slug string) (domain.Tenant, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, error)
-	ListTenants(ctx context.Context) ([]domain.Tenant, error)
+	ListTenants(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Tenant, error)
 	CreateAPIKey(ctx context.Context, tenantID uuid.UUID, environment, name string) (domain.APIKey, string, error)
 	RevokeAPIKey(ctx context.Context, id uuid.UUID) error
 	IssueToken(ctx context.Context, secret string) (app.IssuedToken, error)
@@ -100,7 +100,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) admin(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.adminToken == "" {
-			httpx.WriteError(w, http.StatusServiceUnavailable, "admin_disabled", "LEDGERCORE_ADMIN_TOKEN is not configured")
+			httpx.WriteError(w, r, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "LEDGERCORE_ADMIN_TOKEN is not configured")
 			return
 		}
 		// Accept both the X-Admin-Token header and the documented
@@ -112,7 +112,7 @@ func (s *Server) admin(next http.HandlerFunc) http.Handler {
 			}
 		}
 		if subtle.ConstantTimeCompare([]byte(got), []byte(s.adminToken)) != 1 {
-			httpx.WriteError(w, http.StatusUnauthorized, "invalid_admin_token", "admin token is missing or incorrect (X-Admin-Token or Authorization: Bearer)")
+			httpx.WriteError(w, r, http.StatusUnauthorized, httpx.CodeUnauthorized, "admin token is missing or incorrect (X-Admin-Token or Authorization: Bearer)")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -127,7 +127,7 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if err := s.db.Ping(ctx); err != nil {
-		httpx.WriteError(w, http.StatusServiceUnavailable, "db_unavailable", "database ping failed")
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "database ping failed")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})

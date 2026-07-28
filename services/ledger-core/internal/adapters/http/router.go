@@ -59,7 +59,7 @@ func NewRouter(svc *app.Service, dbPing func(context.Context) error, jwksURL str
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := dbPing(ctx); err != nil {
-			httpx.WriteError(w, http.StatusServiceUnavailable, "not_ready", "database is unreachable")
+			httpx.WriteError(w, r, http.StatusServiceUnavailable, httpx.CodeServiceUnavailable, "database is unreachable")
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})

@@ -110,6 +110,22 @@ const CURL_REPLAY = `curl -si -X POST $API/v1/transactions \\
 const RESP_REPLAY = `HTTP/2 200
 x-idempotent-replay: true`;
 
+// ---- Official SDKs (same flow, 5 lines each) ------------------------------
+
+const SDK_TS = `import { LedgerCore, Money } from "@ledgercore/sdk";
+
+const lc = new LedgerCore({ apiKey: "lk_sandbox_...", baseUrl: "${API}" });
+const ledger = await lc.ledgers.create({ name: "main" });
+const wallet = await lc.accounts.create({ ledger_id: ledger.id, name: "customer:42:wallet", type: "liability", normal_balance: "CREDIT" });
+const txn = await lc.transactions.create({ ledger_id: ledger.id, postings: [/* debits = credits, Money.fromDecimal("100.50","USD",2) */] });`;
+
+const SDK_PHP = `use LedgerCore\\LedgerCore;
+use LedgerCore\\Money;
+
+$lc = new LedgerCore(['api_key' => 'lk_sandbox_...', 'base_url' => '${API}']);
+$ledger = $lc->ledgers->create(['name' => 'main']);
+$txn = $lc->transactions->create(['ledger_id' => $ledger['id'], 'postings' => [/* Money::fromDecimal('100.50','USD',2) */]]);`;
+
 // ---- i18n -----------------------------------------------------------------
 
 interface StepCopy {
@@ -125,6 +141,10 @@ interface QuickstartCopy {
   subtitle: string;
   signupCta: string;
   steps: StepCopy[];
+  sdksTitle: string;
+  sdksBody: string;
+  sdkTsLabel: string;
+  sdkPhpLabel: string;
   errorsTitle: string;
   errors: Array<{ code: string; body: string }>;
   finalTitle: string;
@@ -185,6 +205,11 @@ const ES: QuickstartCopy = {
       respLabel: "Cabeceras esperadas",
     },
   ],
+  sdksTitle: "Lo mismo con los SDKs oficiales",
+  sdksBody:
+    "Todo el flujo anterior en 5 líneas: los SDKs de TypeScript (@ledgercore/sdk) y PHP (ledgercore/sdk) gestionan solos el intercambio de token y su renovación, generan la idempotency key si no la pasas y manejan el dinero siempre como strings de unidades menores (Money.fromDecimal). Viven en sdks/ dentro del monorepo.",
+  sdkTsLabel: "TypeScript · npm install @ledgercore/sdk",
+  sdkPhpLabel: "PHP · composer require ledgercore/sdk",
   errorsTitle: "Errores comunes",
   errors: [
     {
@@ -259,6 +284,11 @@ const EN: QuickstartCopy = {
       respLabel: "Expected headers",
     },
   ],
+  sdksTitle: "The same flow with the official SDKs",
+  sdksBody:
+    "The whole flow above in 5 lines: the TypeScript (@ledgercore/sdk) and PHP (ledgercore/sdk) SDKs handle the token exchange and renewal for you, generate the idempotency key when you don't pass one, and always treat money as minor-unit strings (Money.fromDecimal). They live under sdks/ in the monorepo.",
+  sdkTsLabel: "TypeScript · npm install @ledgercore/sdk",
+  sdkPhpLabel: "PHP · composer require ledgercore/sdk",
   errorsTitle: "Common errors",
   errors: [
     {
@@ -441,6 +471,27 @@ function QuickstartContent() {
             );
           })}
         </div>
+
+        <section className="mt-16">
+          <h2 className="text-base font-semibold text-ink">{c.sdksTitle}</h2>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
+            {c.sdksBody}
+          </p>
+          <div className="mt-4 space-y-3">
+            <CodeBlock
+              label={c.sdkTsLabel}
+              code={SDK_TS}
+              copyLabel={c.copy}
+              copiedLabel={c.copied}
+            />
+            <CodeBlock
+              label={c.sdkPhpLabel}
+              code={SDK_PHP}
+              copyLabel={c.copy}
+              copiedLabel={c.copied}
+            />
+          </div>
+        </section>
 
         <section className="mt-16 rounded-(--radius-card) border border-edge bg-surface/70 p-6">
           <h2 className="text-base font-semibold text-ink">{c.errorsTitle}</h2>

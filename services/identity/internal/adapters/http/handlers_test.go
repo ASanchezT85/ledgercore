@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/services/identity/internal/app"
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
 )
@@ -31,7 +32,7 @@ func (s *stubService) CreateTenant(context.Context, string, string) (domain.Tena
 func (s *stubService) GetTenant(context.Context, uuid.UUID) (domain.Tenant, error) {
 	return s.tenant, s.err
 }
-func (s *stubService) ListTenants(context.Context) ([]domain.Tenant, error) {
+func (s *stubService) ListTenants(context.Context, int, httpx.Cursor) ([]domain.Tenant, error) {
 	return []domain.Tenant{s.tenant}, s.err
 }
 func (s *stubService) CreateAPIKey(context.Context, uuid.UUID, string, string) (domain.APIKey, string, error) {
@@ -125,8 +126,8 @@ func TestValidationErrorMapsTo400(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status %d, want 400", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "validation_error") {
-		t.Errorf("body %s missing validation_error code", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "validation_failed") {
+		t.Errorf("body %s missing validation_failed code", rec.Body.String())
 	}
 }
 
@@ -158,8 +159,8 @@ func TestIssueTokenHandler(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("invalid credentials: status %d, want 401", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "invalid_credentials") {
-		t.Errorf("body %s missing invalid_credentials code", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "unauthorized") {
+		t.Errorf("body %s missing unauthorized code", rec.Body.String())
 	}
 }
 

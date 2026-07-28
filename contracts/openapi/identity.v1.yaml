@@ -8,7 +8,7 @@ info:
 
     Tenant and API key management endpoints are bootstrap/admin endpoints
     gated by the `X-Admin-Token` shared secret (LEDGERCORE_ADMIN_TOKEN); when
-    no admin token is configured they answer 503 `admin_disabled`. Token
+    no admin token is configured they answer 503 `service_unavailable`. Token
     issuance and the JWKS are public.
 
     Issued tokens are EdDSA (Ed25519) JWTs with these claims:
@@ -63,7 +63,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409':
-          description: A tenant with that slug already exists (`slug_conflict`).
+          description: A tenant with that slug already exists (`conflict`).
           content:
             application/json:
               schema:
@@ -75,19 +75,25 @@ paths:
       summary: List tenants
       security:
         - adminToken: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
       responses:
         '200':
-          description: All tenants (no pagination).
+          description: Page of tenants, newest first.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, next_cursor]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Tenant'
+                  next_cursor:
+                    $ref: '#/components/schemas/NextCursor'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '503': { $ref: '#/components/responses/AdminDisabled' }
 
@@ -179,7 +185,7 @@ paths:
         Exchanges the plaintext API key secret (the `lk_...` string returned
         on key creation) for a short-lived EdDSA JWT. Every failure mode —
         unknown key, revoked key, suspended tenant — answers the same 401
-        `invalid_credentials`.
+        `unauthorized`.
       security: []
       requestBody:
         required: true
@@ -231,8 +237,9 @@ paths:
                 badCredentials:
                   value:
                     error:
-                      code: invalid_credentials
+                      code: unauthorized
                       message: api key is unknown, revoked, or its tenant is not active
+                      request_id: 9f1b2c3d4e5f60718293a4b5c6d7e8f9
 
   /.well-known/jwks.json:
     get:
@@ -285,7 +292,7 @@ components:
       description: |
         Bootstrap admin shared secret (LEDGERCORE_ADMIN_TOKEN). A wrong or
         missing value answers 401 `invalid_admin_token`; if the service has
-        no admin token configured, admin endpoints answer 503 `admin_disabled`.
+        no admin token configured, admin endpoints answer 503 `service_unavailable`.
 
   parameters:
     ResourceId:
@@ -298,13 +305,13 @@ components:
 
   responses:
     BadRequest:
-      description: Malformed request (`invalid_request`, `validation_error`, `invalid_id`).
+      description: Invalid input (`validation_failed`) or malformed pagination cursor (`invalid_cursor`).
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: Missing or invalid credentials (`invalid_admin_token`, `invalid_credentials`).
+      description: Missing or invalid credentials (`unauthorized`).
       content:
         application/json:
           schema:
@@ -316,7 +323,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     AdminDisabled:
-      description: Admin endpoints are disabled because LEDGERCORE_ADMIN_TOKEN is not configured (`admin_disabled`).
+      description: Admin endpoints are disabled because LEDGERCORE_ADMIN_TOKEN is not configured (`service_unavailable`).
       content:
         application/json:
           schema:
@@ -329,13 +336,26 @@ components:
       properties:
         error:
           type: object
-          required: [code, message]
+          required: [code, message, request_id]
           properties:
             code:
               type: string
-              description: Stable machine-readable error code (snake_case).
+              description: |
+                Stable machine-readable error code (snake_case). Catalog:
+                validation_failed, invalid_cursor, unauthorized, forbidden,
+                not_found, conflict, idempotency_conflict,
+                unbalanced_transaction, insufficient_funds, rate_limited,
+                service_unavailable, internal.
             message:
               type: string
+            request_id:
+              type: string
+              description: Correlation id of the request (also in X-Request-Id).
+    NextCursor:
+      type: [string, 'null']
+      description: |
+        Opaque cursor for the next page; null when there are no more
+        results (the last page never requires an extra empty fetch).
 
     Environment:
       type: string

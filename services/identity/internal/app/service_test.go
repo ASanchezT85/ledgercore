@@ -55,7 +55,7 @@ func (f *fakeStore) GetTenant(_ context.Context, id uuid.UUID) (domain.Tenant, e
 	return t, nil
 }
 
-func (f *fakeStore) ListTenants(_ context.Context) ([]domain.Tenant, error) {
+func (f *fakeStore) ListTenants(_ context.Context, _ int, _ httpx.Cursor) ([]domain.Tenant, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]domain.Tenant, 0, len(f.tenants))

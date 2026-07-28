@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ledgercore/ledgercore/libs/go/events"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
 )
 
@@ -29,7 +30,7 @@ func invalid(format string, args ...any) error {
 // TxStore is the storage port scoped to one open tenant transaction.
 type TxStore interface {
 	InsertSource(ctx context.Context, s domain.Source) error
-	ListSources(ctx context.Context) ([]domain.Source, error)
+	ListSources(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Source, error)
 	GetSource(ctx context.Context, id uuid.UUID) (domain.Source, error)
 
 	InsertImport(ctx context.Context, imp domain.Import) error
@@ -45,7 +46,7 @@ type TxStore interface {
 	GetRun(ctx context.Context, id uuid.UUID) (domain.Run, error)
 
 	InsertDiscrepancy(ctx context.Context, d domain.Discrepancy) error
-	ListDiscrepancies(ctx context.Context, status domain.DiscrepancyStatus) ([]domain.Discrepancy, error)
+	ListDiscrepancies(ctx context.Context, status domain.DiscrepancyStatus, limit int, cursor httpx.Cursor) ([]domain.Discrepancy, error)
 	GetDiscrepancy(ctx context.Context, id uuid.UUID) (domain.Discrepancy, error)
 	UpdateDiscrepancy(ctx context.Context, d domain.Discrepancy) error
 
@@ -95,12 +96,12 @@ func (s *Service) CreateSource(ctx context.Context, tenantID uuid.UUID, name str
 	return src, nil
 }
 
-// ListSources returns every source of the tenant.
-func (s *Service) ListSources(ctx context.Context, tenantID uuid.UUID) ([]domain.Source, error) {
+// ListSources returns a keyset page of the tenant's sources, newest first.
+func (s *Service) ListSources(ctx context.Context, tenantID uuid.UUID, limit int, cursor httpx.Cursor) ([]domain.Source, error) {
 	var out []domain.Source
 	err := s.store.Within(ctx, tenantID, func(tx TxStore) error {
 		var err error
-		out, err = tx.ListSources(ctx)
+		out, err = tx.ListSources(ctx, limit, cursor)
 		return err
 	})
 	return out, err
@@ -259,8 +260,9 @@ func (s *Service) Report(ctx context.Context, tenantID uuid.UUID) ([]domain.Sour
 	return out, err
 }
 
-// ListDiscrepancies lists discrepancies, optionally filtered by status.
-func (s *Service) ListDiscrepancies(ctx context.Context, tenantID uuid.UUID, status string) ([]domain.Discrepancy, error) {
+// ListDiscrepancies lists a keyset page of discrepancies, newest first,
+// optionally filtered by status.
+func (s *Service) ListDiscrepancies(ctx context.Context, tenantID uuid.UUID, status string, limit int, cursor httpx.Cursor) ([]domain.Discrepancy, error) {
 	filter := domain.DiscrepancyStatus(status)
 	if status != "" && !domain.ValidDiscrepancyStatus(filter) {
 		return nil, invalid("status must be one of open, investigating, resolved")
@@ -268,7 +270,7 @@ func (s *Service) ListDiscrepancies(ctx context.Context, tenantID uuid.UUID, sta
 	var out []domain.Discrepancy
 	err := s.store.Within(ctx, tenantID, func(tx TxStore) error {
 		var err error
-		out, err = tx.ListDiscrepancies(ctx, filter)
+		out, err = tx.ListDiscrepancies(ctx, filter, limit, cursor)
 		return err
 	})
 	return out, err

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
 	"github.com/ledgercore/ledgercore/services/identity/internal/keycrypt"
 )
@@ -40,7 +41,9 @@ func (e ValidationError) Error() string { return e.Msg }
 type TenantRepository interface {
 	CreateTenant(ctx context.Context, t domain.Tenant) error
 	GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, error)
-	ListTenants(ctx context.Context) ([]domain.Tenant, error)
+	// ListTenants returns up to limit tenants newer-first, strictly older
+	// than the keyset cursor when one is given.
+	ListTenants(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Tenant, error)
 }
 
 // APIKeyRepository persists API keys (hash + prefix only, never plaintext).
@@ -189,9 +192,9 @@ func (s *Service) GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, e
 	return s.tenants.GetTenant(ctx, id)
 }
 
-// ListTenants returns every tenant.
-func (s *Service) ListTenants(ctx context.Context) ([]domain.Tenant, error) {
-	return s.tenants.ListTenants(ctx)
+// ListTenants returns a page of tenants, newest first.
+func (s *Service) ListTenants(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Tenant, error) {
+	return s.tenants.ListTenants(ctx, limit, cursor)
 }
 
 // ---- API keys ------------------------------------------------------------------

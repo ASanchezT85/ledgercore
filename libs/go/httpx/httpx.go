@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,7 +73,7 @@ func Recover(next http.Handler) http.Handler {
 					"path", r.URL.Path,
 					"request_id", RequestIDFromContext(r.Context()),
 				)
-				WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+				WriteError(w, r, http.StatusInternalServerError, CodeInternal, "an internal error occurred")
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -144,13 +145,34 @@ func CORSDev(next http.Handler) http.Handler {
 	})
 }
 
+// ---- Error catalog ---------------------------------------------------------------
+
+// Canonical, stable error codes of the platform API. Every 4xx/5xx response
+// of every service uses one of these (documented in docs/errores-api.md).
+const (
+	CodeValidationFailed      = "validation_failed"      // 400: malformed or semantically invalid input
+	CodeInvalidCursor         = "invalid_cursor"         // 400: malformed pagination cursor
+	CodeUnauthorized          = "unauthorized"           // 401: missing/invalid credentials or tenant context
+	CodeForbidden             = "forbidden"              // 403: authenticated but not allowed
+	CodeNotFound              = "not_found"              // 404: resource does not exist within the tenant
+	CodeConflict              = "conflict"               // 409: uniqueness or lifecycle-state conflict
+	CodeIdempotencyConflict   = "idempotency_conflict"   // 409: idempotency key reused with a different payload
+	CodeUnbalancedTransaction = "unbalanced_transaction" // 422: postings do not balance per asset
+	CodeInsufficientFunds     = "insufficient_funds"     // 422: available balance cannot cover the operation
+	CodeRateLimited           = "rate_limited"           // 429: caller exceeded a rate/usage limit
+	CodeServiceUnavailable    = "service_unavailable"    // 503: dependency (e.g. database) unavailable
+	CodeInternal              = "internal"               // 500: unexpected error, details only in logs
+)
+
 // ---- JSON helpers ---------------------------------------------------------------
 
-// errorBody is the platform-wide API error contract.
+// errorBody is the platform-wide API error contract:
+// {"error":{"code","message","request_id"}}.
 type errorBody struct {
 	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
 	} `json:"error"`
 }
 
@@ -167,11 +189,16 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// WriteError writes the standard error shape {"error":{"code","message"}}.
-func WriteError(w http.ResponseWriter, status int, code, msg string) {
+// WriteError writes the standard error shape
+// {"error":{"code","message","request_id"}}. The request id comes from the
+// RequestID middleware via r's context.
+func WriteError(w http.ResponseWriter, r *http.Request, status int, code, msg string) {
 	var body errorBody
 	body.Error.Code = code
 	body.Error.Message = msg
+	if r != nil {
+		body.Error.RequestID = RequestIDFromContext(r.Context())
+	}
 	WriteJSON(w, status, body)
 }
 
@@ -257,4 +284,71 @@ func DecodeCursor(s string) (Cursor, error) {
 // IsZero reports whether the cursor is the first-page (empty) cursor.
 func (c Cursor) IsZero() bool {
 	return c.CreatedAt.IsZero() && c.ID == uuid.Nil
+}
+
+// ---- Uniform pagination -----------------------------------------------------------
+
+// Pagination limits shared by every collection endpoint of the platform:
+// ?limit= defaults to DefaultLimit and is clamped to MaxLimit.
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+// PageRequest is a parsed, validated pagination request.
+type PageRequest struct {
+	Limit  int // requested page size, in [1, MaxLimit]
+	Cursor Cursor
+}
+
+// FetchLimit is the number of rows the storage layer should fetch: one more
+// than the page size, so the presence of a next page is known without a
+// second query.
+func (p PageRequest) FetchLimit() int { return p.Limit + 1 }
+
+// ParsePage reads ?limit= and ?cursor= from the request. On invalid input it
+// writes the standard 400 error (validation_failed or invalid_cursor) and
+// returns ok=false. Limits above MaxLimit are clamped, not rejected.
+func ParsePage(w http.ResponseWriter, r *http.Request) (PageRequest, bool) {
+	page := PageRequest{Limit: DefaultLimit}
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			WriteError(w, r, http.StatusBadRequest, CodeValidationFailed,
+				"limit must be a positive integer")
+			return PageRequest{}, false
+		}
+		if n > MaxLimit {
+			n = MaxLimit
+		}
+		page.Limit = n
+	}
+	cursor, err := DecodeCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		WriteError(w, r, http.StatusBadRequest, CodeInvalidCursor,
+			"cursor is malformed; use the next_cursor value returned by a previous page")
+		return PageRequest{}, false
+	}
+	page.Cursor = cursor
+	return page, true
+}
+
+// Window trims a fetched slice of FetchLimit() rows down to the page size and
+// computes the next cursor. It returns nil when there are no more results, so
+// clients never need an extra empty page. keyOf extracts the keyset cursor of
+// a row.
+func Window[T any](items []T, limit int, keyOf func(T) Cursor) ([]T, *string) {
+	if len(items) <= limit {
+		return items, nil
+	}
+	items = items[:limit]
+	c := keyOf(items[len(items)-1]).Encode()
+	return items, &c
+}
+
+// ListResponse is the uniform collection envelope: {"data":[...],
+// "next_cursor": "..." | null}.
+type ListResponse[T any] struct {
+	Data       []T     `json:"data"`
+	NextCursor *string `json:"next_cursor"`
 }

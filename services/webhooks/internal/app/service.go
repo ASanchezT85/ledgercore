@@ -20,11 +20,15 @@ import (
 // SubscriptionStore persists webhook subscriptions, always tenant-scoped.
 type SubscriptionStore interface {
 	Create(ctx context.Context, sub domain.Subscription) error
-	List(ctx context.Context, tenantID uuid.UUID) ([]domain.Subscription, error)
+	// List returns up to limit subscriptions newest first, strictly older
+	// than the keyset cursor when one is given.
+	List(ctx context.Context, tenantID uuid.UUID, limit int, cursor httpx.Cursor) ([]domain.Subscription, error)
 	Get(ctx context.Context, tenantID, id uuid.UUID) (domain.Subscription, error)
 	// Update applies a partial patch; nil fields are left untouched.
 	Update(ctx context.Context, tenantID, id uuid.UUID, url *string, eventTypes []string, active *bool) (domain.Subscription, error)
-	UpdateSecret(ctx context.Context, tenantID, id uuid.UUID, secret string) error
+	// RotateSecret installs a new signing secret and keeps the old one as
+	// previous_secret, valid for verification until prevExpiresAt.
+	RotateSecret(ctx context.Context, tenantID, id uuid.UUID, secret string, prevExpiresAt time.Time) error
 	ListActive(ctx context.Context, tenantID uuid.UUID) ([]domain.Subscription, error)
 }
 
@@ -98,9 +102,10 @@ func (s *Service) CreateSubscription(ctx context.Context, tenantID uuid.UUID, re
 	return sub, nil
 }
 
-// ListSubscriptions returns every subscription of the tenant.
-func (s *Service) ListSubscriptions(ctx context.Context, tenantID uuid.UUID) ([]domain.Subscription, error) {
-	return s.subs.List(ctx, tenantID)
+// ListSubscriptions returns a keyset page of the tenant's subscriptions,
+// newest first.
+func (s *Service) ListSubscriptions(ctx context.Context, tenantID uuid.UUID, limit int, cursor httpx.Cursor) ([]domain.Subscription, error) {
+	return s.subs.List(ctx, tenantID, limit, cursor)
 }
 
 // GetSubscription returns one subscription of the tenant.
@@ -125,16 +130,19 @@ func (s *Service) UpdateSubscription(ctx context.Context, tenantID uuid.UUID, re
 }
 
 // RotateSecret replaces the signing secret and returns the new plaintext
-// value exactly once.
-func (s *Service) RotateSecret(ctx context.Context, tenantID, id uuid.UUID) (string, error) {
+// value exactly once, plus the instant the previous secret stops verifying.
+// Until then the dispatcher signs every delivery with both secrets, so the
+// receiver can switch whenever it wants inside the grace window.
+func (s *Service) RotateSecret(ctx context.Context, tenantID, id uuid.UUID) (string, time.Time, error) {
 	secret, err := domain.NewSecret()
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	if err := s.subs.UpdateSecret(ctx, tenantID, id, secret); err != nil {
-		return "", err
+	prevExpires := time.Now().UTC().Add(domain.RotationGrace)
+	if err := s.subs.RotateSecret(ctx, tenantID, id, secret, prevExpires); err != nil {
+		return "", time.Time{}, err
 	}
-	return secret, nil
+	return secret, prevExpires, nil
 }
 
 // ListDeliveries returns a page of deliveries plus an opaque next cursor

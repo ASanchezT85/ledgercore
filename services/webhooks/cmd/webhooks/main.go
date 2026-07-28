@@ -100,6 +100,25 @@ func run() error {
 	disp := dispatcher.New(repo)
 	go disp.Run(ctx)
 
+	// Sweep expired previous secrets (rotation grace window, 24h) hourly so
+	// old secrets never outlive their window.
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if n, err := repo.PurgeExpiredPreviousSecrets(ctx); err != nil {
+					slog.Error("purge expired previous secrets failed", "error", err)
+				} else if n > 0 {
+					slog.Info("purged expired previous webhook secrets", "count", n)
+				}
+			}
+		}
+	}()
+
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           httpapi.NewHandler(svc, pool, cfg),

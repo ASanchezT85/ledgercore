@@ -76,12 +76,15 @@ func cursorArgs(c httpx.Cursor) (any, any) {
 	return c.CreatedAt, c.ID
 }
 
+// normalizeLimit clamps the fetch size. Handlers ask for page size + 1 (max
+// httpx.MaxLimit+1) so the presence of a next page is known without an extra
+// query; the clamp only guards direct programmatic callers.
 func normalizeLimit(limit int) int {
 	switch {
 	case limit <= 0:
-		return 25
-	case limit > 100:
-		return 100
+		return httpx.DefaultLimit + 1
+	case limit > httpx.MaxLimit+1:
+		return httpx.MaxLimit + 1
 	default:
 		return limit
 	}

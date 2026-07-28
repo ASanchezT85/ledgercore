@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 	"github.com/ledgercore/ledgercore/libs/go/events"
 	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
 	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
 )
@@ -150,10 +152,17 @@ func (t *txStore) InsertSource(ctx context.Context, s domain.Source) error {
 	return nil
 }
 
-func (t *txStore) ListSources(ctx context.Context) ([]domain.Source, error) {
+func (t *txStore) ListSources(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Source, error) {
+	var cAt, cID any
+	if !cursor.IsZero() {
+		cAt, cID = cursor.CreatedAt, cursor.ID
+	}
 	rows, err := t.tx.Query(ctx, `
 		SELECT id, tenant_id, name, kind, created_at
-		FROM sources ORDER BY created_at, id`)
+		FROM sources
+		WHERE ($1::timestamptz IS NULL OR (created_at, id) < ($1, $2::uuid))
+		ORDER BY created_at DESC, id DESC
+		LIMIT $3`, cAt, cID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list sources: %w", err)
 	}
@@ -364,16 +373,25 @@ func scanDiscrepancy(row pgx.Row) (domain.Discrepancy, error) {
 	return d, nil
 }
 
-func (t *txStore) ListDiscrepancies(ctx context.Context, status domain.DiscrepancyStatus) ([]domain.Discrepancy, error) {
+func (t *txStore) ListDiscrepancies(ctx context.Context, status domain.DiscrepancyStatus, limit int, cursor httpx.Cursor) ([]domain.Discrepancy, error) {
 	query := `
 		SELECT id, tenant_id, run_id, kind, details, status, created_at
 		FROM discrepancies`
+	where := []string{}
 	args := []any{}
 	if status != "" {
-		query += ` WHERE status = $1`
 		args = append(args, string(status))
+		where = append(where, fmt.Sprintf("status = $%d", len(args)))
 	}
-	query += ` ORDER BY created_at DESC, id`
+	if !cursor.IsZero() {
+		args = append(args, cursor.CreatedAt, cursor.ID)
+		where = append(where, fmt.Sprintf("(created_at, id) < ($%d, $%d)", len(args)-1, len(args)))
+	}
+	if len(where) > 0 {
+		query += " WHERE " + strings.Join(where, " AND ")
+	}
+	args = append(args, limit)
+	query += fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT $%d", len(args))
 
 	rows, err := t.tx.Query(ctx, query, args...)
 	if err != nil {

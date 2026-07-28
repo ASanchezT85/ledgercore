@@ -22,7 +22,7 @@ const maxImportBytes = 10 << 20
 func tenant(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, ok := ident.TenantFromContext(r.Context())
 	if !ok || id == uuid.Nil {
-		httpx.WriteError(w, http.StatusUnauthorized, "missing_tenant", "request has no tenant context")
+		httpx.WriteError(w, r, http.StatusUnauthorized, httpx.CodeUnauthorized, "request has no tenant context")
 		return uuid.Nil, false
 	}
 	return id, true
@@ -32,23 +32,23 @@ func tenant(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
-		httpx.WriteError(w, http.StatusNotFound, "not_found", "resource not found")
+		httpx.WriteError(w, r, http.StatusNotFound, httpx.CodeNotFound, "resource not found")
 	case errors.Is(err, app.ErrValidation):
-		httpx.WriteError(w, http.StatusBadRequest, "validation_error", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 	default:
 		slog.Error("request failed",
 			"error", err,
 			"path", r.URL.Path,
 			"request_id", httpx.RequestIDFromContext(r.Context()),
 		)
-		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+		httpx.WriteError(w, r, http.StatusInternalServerError, httpx.CodeInternal, "an internal error occurred")
 	}
 }
 
 func pathUUID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_id", "path id must be a valid UUID")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "path id must be a valid UUID")
 		return uuid.Nil, false
 	}
 	return id, true
@@ -143,7 +143,7 @@ func (s *Server) createSource(w http.ResponseWriter, r *http.Request) {
 		Kind string `json:"kind"`
 	}
 	if err := httpx.DecodeJSON(w, r, &body); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	src, err := s.svc.CreateSource(r.Context(), tenantID, body.Name, domain.SourceKind(body.Kind))
@@ -159,16 +159,23 @@ func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sources, err := s.svc.ListSources(r.Context(), tenantID)
+	page, ok := httpx.ParsePage(w, r)
+	if !ok {
+		return
+	}
+	sources, err := s.svc.ListSources(r.Context(), tenantID, page.FetchLimit(), page.Cursor)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
-	out := make([]sourceJSON, 0, len(sources))
+	sources, next := httpx.Window(sources, page.Limit, func(src domain.Source) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: src.CreatedAt, ID: src.ID}
+	})
+	resp := httpx.ListResponse[sourceJSON]{Data: make([]sourceJSON, 0, len(sources)), NextCursor: next}
 	for _, src := range sources {
-		out = append(out, toSourceJSON(src))
+		resp.Data = append(resp.Data, toSourceJSON(src))
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"data": out})
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 // createImport accepts multipart/form-data with fields:
@@ -181,7 +188,7 @@ func (s *Server) createImport(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
 	if err := r.ParseMultipartForm(4 << 20); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_multipart",
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed,
 			"body must be multipart/form-data with fields source_id and file (max 10 MiB)")
 		return
 	}
@@ -193,12 +200,12 @@ func (s *Server) createImport(w http.ResponseWriter, r *http.Request) {
 
 	sourceID, err := uuid.Parse(r.FormValue("source_id"))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_source_id", "source_id must be a valid UUID")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "source_id must be a valid UUID")
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "missing_file", "multipart field \"file\" is required")
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "multipart field \"file\" is required")
 		return
 	}
 	defer file.Close()
@@ -220,7 +227,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		SourceID uuid.UUID `json:"source_id"`
 	}
 	if err := httpx.DecodeJSON(w, r, &body); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	run, err := s.svc.StartRun(r.Context(), tenantID, body.SourceID)
@@ -287,16 +294,23 @@ func (s *Server) listDiscrepancies(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	discrepancies, err := s.svc.ListDiscrepancies(r.Context(), tenantID, r.URL.Query().Get("status"))
+	page, ok := httpx.ParsePage(w, r)
+	if !ok {
+		return
+	}
+	discrepancies, err := s.svc.ListDiscrepancies(r.Context(), tenantID, r.URL.Query().Get("status"), page.FetchLimit(), page.Cursor)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
-	out := make([]discrepancyJSON, 0, len(discrepancies))
+	discrepancies, next := httpx.Window(discrepancies, page.Limit, func(d domain.Discrepancy) httpx.Cursor {
+		return httpx.Cursor{CreatedAt: d.CreatedAt, ID: d.ID}
+	})
+	resp := httpx.ListResponse[discrepancyJSON]{Data: make([]discrepancyJSON, 0, len(discrepancies)), NextCursor: next}
 	for _, d := range discrepancies {
-		out = append(out, toDiscrepancyJSON(d))
+		resp.Data = append(resp.Data, toDiscrepancyJSON(d))
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"data": out})
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) patchDiscrepancy(w http.ResponseWriter, r *http.Request) {
@@ -313,7 +327,7 @@ func (s *Server) patchDiscrepancy(w http.ResponseWriter, r *http.Request) {
 		ResolutionNote string `json:"resolution_note"`
 	}
 	if err := httpx.DecodeJSON(w, r, &body); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, err.Error())
 		return
 	}
 	d, err := s.svc.UpdateDiscrepancy(r.Context(), tenantID, id, domain.DiscrepancyStatus(body.Status), body.ResolutionNote)

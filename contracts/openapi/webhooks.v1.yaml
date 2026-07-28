@@ -4,9 +4,19 @@ info:
   version: 1.0.0
   description: |
     Outbound webhook subscriptions. Deliveries are HMAC-SHA256 signed with
-    the subscription secret (header X-LedgerCore-Signature) and retried with
-    exponential backoff (5 attempts, then `dead`). The payload is the
-    standard event envelope.
+    the subscription secret (header `X-LedgerCore-Signature`,
+    `t=<unix>,v1=<hex>`) and retried with exponential backoff (5 attempts,
+    then `dead`). The payload is the standard event envelope.
+
+    Secret rotation has a 24h grace period: after `POST .../rotate-secret`
+    deliveries carry TWO `v1` entries (new secret first, then the previous
+    one) until `previous_secret_expires_at`, so receivers can switch at any
+    point inside the window without losing events. Verify by accepting the
+    header if ANY `v1` entry matches your secret.
+
+    Every error uses the platform shape
+    `{"error":{"code","message","request_id"}}` with stable snake_case codes
+    (see docs/errores-api.md).
 
     Routes live under `/v1/webhook-subscriptions` and `/v1/webhook-deliveries`
     (the gateway routes those prefixes to this service). The tenant is
@@ -62,19 +72,25 @@ paths:
       operationId: listSubscriptions
       tags: [Subscriptions]
       summary: List subscriptions
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
       responses:
         '200':
-          description: Subscriptions (without secrets, no pagination).
+          description: Page of subscriptions (without secrets), newest first.
           content:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, next_cursor]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Subscription'
+                  next_cursor:
+                    $ref: '#/components/schemas/NextCursor'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /v1/webhook-subscriptions/{id}:
@@ -139,29 +155,41 @@ paths:
     post:
       operationId: rotateSubscriptionSecret
       tags: [Subscriptions]
-      summary: Rotate the signing secret
-      description: Generates a new secret and returns it exactly once.
+      summary: Rotate the signing secret (24h grace period)
+      description: |
+        Generates a new secret and returns it exactly once. The previous
+        secret keeps VERIFYING until `previous_secret_expires_at` (24 hours):
+        during that window every delivery is signed with both secrets (two
+        `v1` entries in `X-LedgerCore-Signature`), so the receiver can switch
+        whenever it wants inside the window without losing events. After the
+        deadline the old secret is purged and never used again.
       parameters:
         - $ref: '#/components/parameters/ResourceId'
       responses:
         '200':
-          description: New secret.
+          description: New secret plus the instant the previous one stops verifying.
           content:
             application/json:
               schema:
                 type: object
-                required: [id, secret]
+                required: [id, secret, previous_secret_expires_at]
                 properties:
                   id:
                     type: string
                     format: uuid
                   secret:
                     type: string
+                    description: New signing secret; shown exactly once.
+                  previous_secret_expires_at:
+                    type: string
+                    format: date-time
+                    description: Until this instant deliveries are signed with the previous secret too.
               examples:
                 rotated:
                   value:
                     id: a7b8c9d0-e1f2-7a3b-5c6d-7e8f9a0b1c2d
                     secret: whsec_0a1b2c3d4e5f
+                    previous_secret_expires_at: '2026-07-25T12:00:00Z'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -180,18 +208,8 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/DeliveryStatus'
-        - name: cursor
-          in: query
-          description: Opaque keyset cursor from a previous page.
-          schema:
-            type: string
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
       responses:
         '200':
           description: Page of deliveries, newest first.
@@ -206,8 +224,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Delivery'
                   next_cursor:
-                    type: [string, 'null']
-                    description: Opaque cursor for the next page; null when exhausted.
+                    $ref: '#/components/schemas/NextCursor'
               examples:
                 page:
                   value:
@@ -276,16 +293,33 @@ components:
       schema:
         type: string
         format: uuid
+    PageLimit:
+      name: limit
+      in: query
+      description: Page size; values above 200 are clamped to 200.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    PageCursor:
+      name: cursor
+      in: query
+      description: |
+        Opaque keyset cursor from a previous page. A malformed cursor yields
+        400 `invalid_cursor`.
+      schema:
+        type: string
 
   responses:
     BadRequest:
-      description: Malformed request (`invalid_request`).
+      description: Invalid input (`validation_failed`) or malformed pagination cursor (`invalid_cursor`).
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: Missing or invalid credentials (`missing_token`, `invalid_token`).
+      description: Missing or invalid credentials (`unauthorized`).
       content:
         application/json:
           schema:
@@ -304,13 +338,27 @@ components:
       properties:
         error:
           type: object
-          required: [code, message]
+          required: [code, message, request_id]
           properties:
             code:
               type: string
-              description: Stable machine-readable error code (snake_case).
+              description: |
+                Stable machine-readable error code (snake_case). Catalog:
+                validation_failed, invalid_cursor, unauthorized, forbidden,
+                not_found, conflict, idempotency_conflict,
+                unbalanced_transaction, insufficient_funds, rate_limited,
+                service_unavailable, internal.
             message:
               type: string
+            request_id:
+              type: string
+              description: Correlation id of the request (also in X-Request-Id).
+
+    NextCursor:
+      type: [string, 'null']
+      description: |
+        Opaque cursor for the next page; null when there are no more
+        results (the last page never requires an extra empty fetch).
 
     EventType:
       type: string

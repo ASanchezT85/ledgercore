@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
 )
 
@@ -60,10 +61,19 @@ func (s *Store) GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, err
 	return t, nil
 }
 
-// ListTenants returns every tenant ordered by creation time.
-func (s *Store) ListTenants(ctx context.Context) ([]domain.Tenant, error) {
+// ListTenants returns a keyset page of tenants, newest first. A zero cursor
+// starts at the newest tenant.
+func (s *Store) ListTenants(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Tenant, error) {
+	var cAt, cID any
+	if !cursor.IsZero() {
+		cAt, cID = cursor.CreatedAt, cursor.ID
+	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, slug, status, created_at, expires_at FROM tenants ORDER BY created_at, id`,
+		`SELECT id, name, slug, status, created_at, expires_at
+		 FROM tenants
+		 WHERE ($1::timestamptz IS NULL OR (created_at, id) < ($1, $2::uuid))
+		 ORDER BY created_at DESC, id DESC
+		 LIMIT $3`, cAt, cID, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: list tenants: %w", err)

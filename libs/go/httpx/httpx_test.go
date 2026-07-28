@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,9 @@ import (
 
 func TestWriteError(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, http.StatusUnprocessableEntity, "unbalanced_transaction", "debits and credits must balance per asset")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), requestIDKey{}, "req-123"))
+	WriteError(rec, req, http.StatusUnprocessableEntity, "unbalanced_transaction", "debits and credits must balance per asset")
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d", rec.Code)
@@ -23,8 +26,9 @@ func TestWriteError(t *testing.T) {
 	}
 	var body struct {
 		Error struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			RequestID string `json:"request_id"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -35,6 +39,9 @@ func TestWriteError(t *testing.T) {
 	}
 	if body.Error.Message == "" {
 		t.Fatal("message missing")
+	}
+	if body.Error.RequestID != "req-123" {
+		t.Fatalf("request_id = %q, want propagated id", body.Error.RequestID)
 	}
 }
 
@@ -162,7 +169,7 @@ func TestRecoverMiddleware(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "internal_error") {
+	if !strings.Contains(rec.Body.String(), "\"code\":\"internal\"") {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 }

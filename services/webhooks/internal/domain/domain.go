@@ -129,6 +129,10 @@ func ValidateEndpointURL(raw string, requireHTTPS bool) error {
 // SecretPrefix identifies LedgerCore webhook secrets (Stripe-style whsec_).
 const SecretPrefix = "whsec_"
 
+// RotationGrace is how long the previous secret keeps verifying deliveries
+// after a rotation. During the window the dispatcher signs with both secrets.
+const RotationGrace = 24 * time.Hour
+
 const (
 	secretAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	secretLength   = 32
@@ -213,6 +217,27 @@ type Subscription struct {
 	EventTypes []string
 	Active     bool
 	CreatedAt  time.Time
+
+	// PreviousSecret is the pre-rotation secret, kept for RotationGrace so
+	// receivers can migrate without losing events. Nil when no rotation is
+	// in progress.
+	PreviousSecret          *string
+	PreviousSecretExpiresAt *time.Time
+}
+
+// SigningSecrets returns every secret deliveries must be signed with at the
+// given instant: the current one plus, during the rotation grace window, the
+// previous one.
+func (s Subscription) SigningSecrets(now time.Time) []string {
+	return signingSecrets(s.Secret, s.PreviousSecret, s.PreviousSecretExpiresAt, now)
+}
+
+func signingSecrets(secret string, prev *string, prevExpires *time.Time, now time.Time) []string {
+	out := []string{secret}
+	if prev != nil && *prev != "" && prevExpires != nil && now.Before(*prevExpires) {
+		out = append(out, *prev)
+	}
+	return out
 }
 
 // Delivery is one event fanned out to one subscription.
@@ -244,4 +269,13 @@ type ClaimedDelivery struct {
 	Attempts       int
 	URL            string
 	Secret         string
+
+	// Pre-rotation secret still inside its grace window (see Subscription).
+	PreviousSecret          *string
+	PreviousSecretExpiresAt *time.Time
+}
+
+// SigningSecrets returns the secrets to sign this delivery with at `now`.
+func (c ClaimedDelivery) SigningSecrets(now time.Time) []string {
+	return signingSecrets(c.Secret, c.PreviousSecret, c.PreviousSecretExpiresAt, now)
 }

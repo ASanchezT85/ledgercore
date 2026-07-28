@@ -169,13 +169,41 @@ func TestRepoEndToEnd(t *testing.T) {
 		t.Fatalf("delivered bookkeeping incomplete: %+v", done[0])
 	}
 
-	// Rotate secret.
-	if err := repo.UpdateSecret(ctx, tenantID, sub.ID, "whsec_rotated0000000000000000000000"); err != nil {
-		t.Fatalf("update secret: %v", err)
+	// Rotate secret: the old one must survive as previous_secret until the
+	// grace deadline, and the purge must clear it once expired.
+	oldSecret := got.Secret
+	prevExpires := time.Now().UTC().Add(domain.RotationGrace)
+	if err := repo.RotateSecret(ctx, tenantID, sub.ID, "whsec_rotated0000000000000000000000", prevExpires); err != nil {
+		t.Fatalf("rotate secret: %v", err)
 	}
 	got, err = repo.Get(ctx, tenantID, sub.ID)
 	if err != nil || got.Secret != "whsec_rotated0000000000000000000000" {
 		t.Fatalf("secret not rotated: %v (%+v)", err, got)
+	}
+	if got.PreviousSecret == nil || *got.PreviousSecret != oldSecret || got.PreviousSecretExpiresAt == nil {
+		t.Fatalf("previous secret not retained: %+v", got)
+	}
+	if secrets := got.SigningSecrets(time.Now()); len(secrets) != 2 {
+		t.Fatalf("expected 2 signing secrets during grace, got %v", secrets)
+	}
+	// Not yet expired: the purge must leave it alone.
+	if _, err := repo.PurgeExpiredPreviousSecrets(ctx); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	got, _ = repo.Get(ctx, tenantID, sub.ID)
+	if got.PreviousSecret == nil {
+		t.Fatalf("purge removed a still-valid previous secret")
+	}
+	// Force-expire and purge.
+	if err := repo.RotateSecret(ctx, tenantID, sub.ID, got.Secret, time.Now().UTC().Add(-time.Second)); err != nil {
+		t.Fatalf("re-rotate: %v", err)
+	}
+	if n, err := repo.PurgeExpiredPreviousSecrets(ctx); err != nil || n != 1 {
+		t.Fatalf("purge expired: n=%d err=%v", n, err)
+	}
+	got, _ = repo.Get(ctx, tenantID, sub.ID)
+	if got.PreviousSecret != nil || got.PreviousSecretExpiresAt != nil {
+		t.Fatalf("expired previous secret not purged: %+v", got)
 	}
 
 	// Deactivated subscriptions are excluded from claims.

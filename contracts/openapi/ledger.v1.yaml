@@ -564,7 +564,7 @@ paths:
                 reversed:
                   value:
                     error:
-                      code: invalid_state
+                      code: conflict
                       message: transaction is reversed and cannot be posted
 
   /v1/transactions/{id}/reverse:
@@ -640,7 +640,7 @@ paths:
                 alreadyReversed:
                   value:
                     error:
-                      code: invalid_state
+                      code: conflict
                       message: transaction is already reversed
 
   /v1/holds:
@@ -806,7 +806,7 @@ paths:
                 notActive:
                   value:
                     error:
-                      code: invalid_state
+                      code: conflict
                       message: hold is already released
 
   /v1/holds/{id}/release:
@@ -849,7 +849,7 @@ paths:
                 notActive:
                   value:
                     error:
-                      code: invalid_state
+                      code: conflict
                       message: hold is already captured
 
   /v1/trial-balance:
@@ -1094,21 +1094,24 @@ components:
     Limit:
       name: limit
       in: query
+      description: Page size; values above 200 are clamped to 200.
       schema:
         type: integer
         minimum: 1
-        maximum: 100
-        default: 25
+        maximum: 200
+        default: 50
     Cursor:
       name: cursor
       in: query
-      description: Opaque keyset cursor from a previous page.
+      description: |
+        Opaque keyset cursor from a previous page's `next_cursor`. A
+        malformed cursor yields 400 `invalid_cursor`.
       schema:
         type: string
 
   responses:
     BadRequest:
-      description: Malformed request.
+      description: Invalid input (`validation_failed`) or malformed pagination cursor (`invalid_cursor`).
       content:
         application/json:
           schema:
@@ -1117,8 +1120,9 @@ components:
             badRequest:
               value:
                 error:
-                  code: bad_request
+                  code: validation_failed
                   message: 'unknown field "amonut"'
+                  request_id: 9f1b2c3d4e5f60718293a4b5c6d7e8f9
     Unauthorized:
       description: Missing or invalid credentials.
       content:
@@ -1129,8 +1133,9 @@ components:
             unauthorized:
               value:
                 error:
-                  code: invalid_token
+                  code: unauthorized
                   message: token is invalid or expired
+                  request_id: 9f1b2c3d4e5f60718293a4b5c6d7e8f9
     NotFound:
       description: The resource does not exist within this tenant.
       content:
@@ -1143,6 +1148,7 @@ components:
                 error:
                   code: not_found
                   message: resource not found
+                  request_id: 9f1b2c3d4e5f60718293a4b5c6d7e8f9
     NotImplemented:
       description: Declared stub for a future milestone (`not_implemented`).
       content:
@@ -1167,6 +1173,7 @@ components:
                 error:
                   code: conflict
                   message: a resource with that name already exists
+                  request_id: 9f1b2c3d4e5f60718293a4b5c6d7e8f9
 
   schemas:
     Error:
@@ -1175,14 +1182,22 @@ components:
       properties:
         error:
           type: object
-          required: [code, message]
+          required: [code, message, request_id]
           properties:
             code:
               type: string
-              description: Stable machine-readable error code (snake_case).
+              description: |
+                Stable machine-readable error code (snake_case). Catalog:
+                validation_failed, invalid_cursor, unauthorized, forbidden,
+                not_found, conflict, idempotency_conflict,
+                unbalanced_transaction, insufficient_funds, rate_limited,
+                service_unavailable, internal.
             message:
               type: string
               description: Human-readable explanation. Never parse this.
+            request_id:
+              type: string
+              description: Correlation id of the request (also in X-Request-Id).
 
     AssetCode:
       type: string
@@ -1663,7 +1678,9 @@ components:
             $ref: '#/components/schemas/AssetBalance'
         next_cursor:
           type: [string, 'null']
-          description: Keyset cursor for the next page of entries.
+          description: |
+            Keyset cursor for the next page of entries; null when there are
+            no more results (no extra empty page needed).
 
     ProviderPositions:
       type: object

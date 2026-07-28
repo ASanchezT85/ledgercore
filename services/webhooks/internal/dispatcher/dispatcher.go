@@ -156,7 +156,10 @@ func Send(ctx context.Context, client *http.Client, c domain.ClaimedDelivery) (i
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-LedgerCore-Event-Id", c.EventID.String())
 	req.Header.Set("X-LedgerCore-Event-Type", c.EventType)
-	req.Header.Set(signature.HeaderName, signature.Header(c.Secret, ts, c.Payload))
+	// During a secret rotation the header carries one v1 entry per secret
+	// (new first, then the still-valid previous one), so the receiver can
+	// verify with either.
+	req.Header.Set(signature.HeaderName, signature.HeaderMulti(c.SigningSecrets(time.Now()), ts, c.Payload))
 
 	resp, err := client.Do(req)
 	if err != nil {
