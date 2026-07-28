@@ -11,7 +11,7 @@ export interface AssetBalance {
 export interface Posting {
   account: string;
   direction: "debit" | "credit";
-  amountUnits: number;
+  amountUnits: number | bigint;
   asset: string;
   exponent: number;
 }
@@ -21,7 +21,7 @@ export interface Transaction {
   ledger: string;
   description: string;
   status: TransactionStatus;
-  amountUnits: number;
+  amountUnits: number | bigint;
   asset: string;
   exponent: number;
   createdAt: string;

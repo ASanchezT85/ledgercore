@@ -69,9 +69,10 @@ func NewRouter(svc *app.Service, dbPing func(context.Context) error, jwksURL str
 	root.Handle("/v1/", ident.RequireAuth(jwksURL, authDisabled)(api))
 
 	var handler http.Handler = root
-	if authDisabled {
-		// Dev only: the gateway owns CORS in real deployments.
-		handler = httpx.CORSDev(handler)
-	}
+	// CORS must wrap the auth middleware: browser preflights (OPTIONS) carry
+	// no Authorization header and would otherwise die with 401 before the
+	// CORS handler could answer them. The console is a cross-origin browser
+	// client in every deployment.
+	handler = httpx.CORSDev(handler)
 	return httpx.RequestID(httpx.Recover(httpx.Logger(handler)))
 }

@@ -105,6 +105,12 @@ function LandingContent() {
             {t.nav.blog}
           </Link>
           <Link
+            href="/docs/quickstart"
+            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
+          >
+            {t.nav.quickstart}
+          </Link>
+          <Link
             href="/login"
             className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
           >
@@ -206,6 +212,14 @@ function LandingContent() {
               {t.how.responseNote}
             </p>
           </div>
+          <p className="mt-6 text-center">
+            <Link
+              href="/docs/quickstart"
+              className="text-sm font-medium text-accent hover:underline"
+            >
+              {t.how.quickstartCta}
+            </Link>
+          </p>
         </div>
       </section>
 

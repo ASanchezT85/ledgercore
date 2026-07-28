@@ -30,6 +30,7 @@ const es = {
   },
   nav: {
     blog: "Blog",
+    quickstart: "Quickstart",
     login: "Iniciar sesión",
     trySandbox: "Probar el sandbox",
     ariaLabel: "Principal",
@@ -57,6 +58,7 @@ const es = {
       "Un depósito de USD 100 con fee de 3: un solo POST, tres postings, y el invariante débitos = créditos verificado por el motor.",
     responseNote:
       "10000 = 9700 + 300. Montos en unidades menores (centavos), como enteros. Si no balancea, no se postea.",
+    quickstartCta: "Hazlo tú mismo: de 0 a tu primera transacción en 10 minutos →",
   },
   features: {
     title: "Qué incluye",
@@ -133,6 +135,8 @@ const es = {
     expiresPre: "expira el",
     purgeNote: "Después de esa fecha el tenant y sus datos se purgan automáticamente.",
     goConsole: "Ir a la consola",
+    nextStepPre: "Siguiente paso:",
+    nextStepLink: "el quickstart — tu primera transacción en 10 minutos",
     footerBrand: "LedgerCore — infraestructura financiera",
     haveAccount: "¿Ya tienes cuenta?",
     curlComments: {
@@ -152,6 +156,7 @@ const en: typeof es = {
   },
   nav: {
     blog: "Blog",
+    quickstart: "Quickstart",
     login: "Sign in",
     trySandbox: "Try the sandbox",
     ariaLabel: "Main",
@@ -179,6 +184,7 @@ const en: typeof es = {
       "A USD 100 deposit with a 3 fee: one POST, three postings, and the debits = credits invariant enforced by the engine.",
     responseNote:
       "10000 = 9700 + 300. Amounts in minor units (cents), as integers. If it doesn't balance, it doesn't post.",
+    quickstartCta: "Do it yourself: from 0 to your first transaction in 10 minutes →",
   },
   features: {
     title: "What's included",
@@ -255,6 +261,8 @@ const en: typeof es = {
     expiresPre: "expires on",
     purgeNote: "After that date the tenant and its data are automatically purged.",
     goConsole: "Go to the console",
+    nextStepPre: "Next step:",
+    nextStepLink: "the quickstart — your first transaction in 10 minutes",
     footerBrand: "LedgerCore — financial infrastructure",
     haveAccount: "Already have an account?",
     curlComments: {

@@ -84,6 +84,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /v1/api-keys/{id}", s.admin(s.handleRevokeAPIKey))
 
 	var h http.Handler = mux
+	// Browser clients (the console) call token issuance cross-origin; the
+	// shared dev CORS middleware answers preflights and mirrors the origin,
+	// matching ledger-core and reconciliation.
+	h = httpx.CORSDev(h)
 	h = httpx.Logger(h)
 	h = httpx.RequestID(h)
 	h = httpx.Recover(h)

@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeftRight,
   BookOpenText,
@@ -12,6 +13,12 @@ import {
 } from "lucide-react";
 import { BrandLockup } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
+import {
+  hasSession,
+  logout,
+  sessionClaims,
+  type SessionClaims,
+} from "@/lib/session";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -23,6 +30,15 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [live, setLive] = useState(false);
+  const [claims, setClaims] = useState<SessionClaims | null>(null);
+
+  useEffect(() => {
+    if (!hasSession()) return;
+    setLive(true);
+    void sessionClaims().then(setClaims);
+  }, []);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-edge bg-surface/60 backdrop-blur-md">
@@ -35,13 +51,30 @@ export function Sidebar() {
       <div className="px-5 pb-4">
         <div className="flex items-center justify-between rounded-lg border border-edge bg-surface-raised px-3 py-2">
           <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-ink">
-              Acme Fintech, Inc.
-            </p>
-            <p className="text-[10px] text-ink-faint">tenant · producción</p>
+            {live ? (
+              <>
+                <p
+                  className="truncate font-mono text-[11px] font-medium text-ink"
+                  title={claims?.tenantId}
+                >
+                  {claims ? claims.tenantId.slice(0, 13) + "…" : "tenant"}
+                </p>
+                <p className="text-[10px] text-ink-faint">tenant · sesión real</p>
+              </>
+            ) : (
+              <>
+                <p className="truncate text-xs font-medium text-ink">
+                  Acme Fintech, Inc.
+                </p>
+                <p className="text-[10px] text-ink-faint">tenant · demo</p>
+              </>
+            )}
           </div>
-          <Badge tone="emerald" dot>
-            live
+          <Badge
+            tone={live ? (claims?.env === "live" ? "emerald" : "violet") : "slate"}
+            dot
+          >
+            {live ? (claims?.env ?? "…") : "demo"}
           </Badge>
         </div>
       </div>
@@ -81,23 +114,27 @@ export function Sidebar() {
       <div className="border-t border-edge px-3 py-4">
         <div className="flex items-center gap-3 rounded-lg px-3 py-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500/30 to-teal-500/30 text-xs font-semibold text-accent">
-            MF
+            {live ? "OP" : "MF"}
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-medium text-ink">
-              María Fernández
+              {live ? "Operador" : "María Fernández"}
             </p>
             <p className="truncate text-[10px] text-ink-faint">
-              finance-ops@acme.com
+              {live ? "autenticado con API key" : "finance-ops@acme.com"}
             </p>
           </div>
-          <Link
-            href="/login"
+          <button
+            type="button"
+            onClick={() => {
+              logout();
+              router.push("/login");
+            }}
             className="text-ink-faint transition-colors hover:text-danger"
             aria-label="Cerrar sesión"
           >
             <LogOut size={15} aria-hidden="true" />
-          </Link>
+          </button>
         </div>
       </div>
     </aside>

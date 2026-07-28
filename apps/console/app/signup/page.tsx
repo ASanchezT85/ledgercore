@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
+import { ThinkingOrb } from "thinking-orbs";
 import { BrandLockup } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import { LanguageProvider, LangToggle, useLang } from "@/components/language";
@@ -183,8 +184,16 @@ function SignupContent() {
                   disabled={busy}
                   className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-(--radius-control) bg-accent-deep text-sm font-semibold text-[#03150e] shadow-[0_0_24px_rgb(16_185_129/0.3)] transition-colors hover:bg-accent disabled:opacity-60"
                 >
+                  {busy && (
+                    <ThinkingOrb
+                      state="working"
+                      size={20}
+                      theme="light"
+                      aria-hidden="true"
+                    />
+                  )}
                   {busy ? s.submitBusy : s.submit}
-                  <ArrowRight size={15} aria-hidden="true" />
+                  {!busy && <ArrowRight size={15} aria-hidden="true" />}
                 </button>
               </form>
 
@@ -253,6 +262,16 @@ function SignupContent() {
                 {s.goConsole}
                 <ArrowRight size={15} aria-hidden="true" />
               </Link>
+
+              <p className="mt-4 text-center text-xs text-ink-muted">
+                {s.nextStepPre}{" "}
+                <Link
+                  href="/docs/quickstart"
+                  className="font-medium text-accent hover:underline"
+                >
+                  {s.nextStepLink}
+                </Link>
+              </p>
             </>
           )}
         </div>
