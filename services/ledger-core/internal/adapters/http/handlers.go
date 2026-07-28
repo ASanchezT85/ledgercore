@@ -645,7 +645,20 @@ func (h *handler) releaseHold(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, newHoldView(hold))
 }
 
-// ---- reports & stubs -------------------------------------------------------------
+// ---- reports ---------------------------------------------------------------------
+
+// optionalTime parses an RFC 3339 query parameter, zero when absent.
+func optionalTime(w http.ResponseWriter, raw, name string) (time.Time, bool) {
+	if raw == "" {
+		return time.Time{}, true
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_request", name+" must be an RFC 3339 date-time")
+		return time.Time{}, false
+	}
+	return t, true
+}
 
 func (h *handler) trialBalance(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := h.tenant(w, r)
@@ -657,7 +670,15 @@ func (h *handler) trialBalance(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "ledger_id query parameter is required and must be a UUID")
 		return
 	}
-	tb, err := h.svc.TrialBalance(r.Context(), tenantID, ledgerID)
+	var asOf *time.Time
+	t, ok := optionalTime(w, r.URL.Query().Get("as_of"), "as_of")
+	if !ok {
+		return
+	}
+	if !t.IsZero() {
+		asOf = &t
+	}
+	tb, err := h.svc.TrialBalance(r.Context(), tenantID, ledgerID, asOf)
 	if err != nil {
 		writeErr(w, r, err)
 		return
@@ -665,9 +686,45 @@ func (h *handler) trialBalance(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, newTrialBalanceView(tb))
 }
 
-func notImplemented(feature string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		httpx.WriteError(w, http.StatusNotImplemented, "not_implemented",
-			feature+" is not implemented yet; it is planned for a future milestone")
+func (h *handler) statement(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := h.tenant(w, r)
+	if !ok {
+		return
 	}
+	accountID, err := uuid.Parse(r.URL.Query().Get("account_id"))
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "bad_request", "account_id query parameter is required and must be a UUID")
+		return
+	}
+	from, ok := optionalTime(w, r.URL.Query().Get("from"), "from")
+	if !ok {
+		return
+	}
+	to, ok := optionalTime(w, r.URL.Query().Get("to"), "to")
+	if !ok {
+		return
+	}
+	page, ok := parsePage(w, r)
+	if !ok {
+		return
+	}
+	st, err := h.svc.Statement(r.Context(), tenantID, accountID, from, to, page)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newStatementView(st, page.Limit))
+}
+
+func (h *handler) providerPositions(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	positions, err := h.svc.ProviderPositions(r.Context(), tenantID)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newProviderPositionsView(positions))
 }

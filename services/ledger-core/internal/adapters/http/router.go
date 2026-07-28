@@ -48,10 +48,8 @@ func NewRouter(svc *app.Service, dbPing func(context.Context) error, jwksURL str
 
 	// Reports.
 	api.HandleFunc("GET /v1/trial-balance", h.trialBalance)
-
-	// Explicit stubs for future milestones.
-	api.HandleFunc("GET /v1/statements", notImplemented("GET /v1/statements"))
-	api.HandleFunc("GET /v1/provider-positions", notImplemented("GET /v1/provider-positions"))
+	api.HandleFunc("GET /v1/statements", h.statement)
+	api.HandleFunc("GET /v1/provider-positions", h.providerPositions)
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

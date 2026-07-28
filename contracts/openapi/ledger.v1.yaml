@@ -871,9 +871,11 @@ paths:
         - name: as_of
           in: query
           description: |
-            Compute the balance as of this instant. Accepted but currently
-            ignored — historical as-of is not implemented yet (fase 1.5);
-            the report always reflects the current state.
+            Compute the balance as of this instant: the report is
+            reconstructed by aggregating postings of transactions with
+            `effective_at <= as_of` (transactions later reversed still count
+            at instants before their reversal's `effective_at`). Without it,
+            the report reflects the current running balances.
           schema:
             type: string
             format: date-time
@@ -923,22 +925,154 @@ paths:
 
   /v1/statements:
     get:
-      operationId: listStatements
+      operationId: getStatement
       tags: [Reports]
-      summary: Account statements (stub)
-      description: 'Not implemented yet (fase 1.5): always answers 501.'
+      summary: Account statement
+      description: |
+        Statement of one account over a period: opening balance per asset
+        (aggregate of postings with `effective_at` strictly before `from`),
+        entries ordered by `effective_at` ascending with a per-asset running
+        balance, and the closing balance at `to`. Balances are signed by the
+        account's normal balance side, so a funded credit-normal wallet shows
+        positive numbers. Reversed transactions keep contributing (their
+        compensating transaction appears as its own entry). Entries are
+        keyset-paginated; opening/closing always cover the whole period
+        regardless of the page.
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Period start (inclusive). Defaults to `to` minus 30 days.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Period end (inclusive). Defaults to now.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
-        '501': { $ref: '#/components/responses/NotImplemented' }
+        '200':
+          description: The account statement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Statement'
+              examples:
+                walletStatement:
+                  summary: Wallet statement with two deposits in the period
+                  value:
+                    account:
+                      id: 2b1c7d3f-0a2b-7c4d-9e50-6f8a0b1c2d3e
+                      ledger_id: 1f0a6a2e-9c1b-7f2e-8a11-3c5d7e9f0b21
+                      name: customer:cust_42:wallet
+                      type: liability
+                      normal_balance: CREDIT
+                      status: active
+                      metadata: {}
+                      created_at: '2026-05-01T09:00:00Z'
+                    period:
+                      from: '2026-06-01T00:00:00Z'
+                      to: '2026-07-01T00:00:00Z'
+                    opening_balance:
+                      - asset: USD
+                        exponent: 2
+                        amount: '14550'
+                    entries:
+                      - id: 7c2d8e4f-1b3c-7d5e-af61-8a9b0c1d2e3f
+                        transaction_id: 3c2d8e4f-1b3c-7d5e-af61-8a9b0c1d2e30
+                        reference: dep-2001
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '1940' }
+                        effective_at: '2026-06-01T13:00:00Z'
+                        running_balance: '16490'
+                      - id: 8d3e9f50-2c4d-7e6f-b072-9b0c1d2e3f40
+                        transaction_id: 4d3e9f50-2c4d-7e6f-b072-9b0c1d2e3f41
+                        reference: dep-2002
+                        direction: CREDIT
+                        amount: { asset: USD, amount: '970' }
+                        effective_at: '2026-06-01T14:00:00Z'
+                        running_balance: '17460'
+                    closing_balance:
+                      - asset: USD
+                        exponent: 2
+                        amount: '17460'
+                    next_cursor: null
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /v1/provider-positions:
     get:
       operationId: listProviderPositions
       tags: [Reports]
-      summary: Provider positions (stub)
-      description: 'Not implemented yet (fase 1.5): always answers 501.'
+      summary: Provider (counterparty) positions
+      description: |
+        Net position against every counterparty (payment provider, bank,
+        processor), aggregated from the running `account_balances` of asset-
+        and liability-type accounts — never from postings.
+
+        Convention: an account belongs to a provider when its name/path
+        contains a `provider` segment followed by the provider name —
+        `assets:provider:thunes:usd` or `liabilities/provider/dlocal/mxn`
+        (both `:` and `/` work as separators) — or when the account carries
+        `metadata.provider` as an explicit override (it wins over the path).
+
+        `net` is the signed sum of `posted_debits - posted_credits` across
+        the provider's accounts per asset: positive means the counterparty
+        holds value for us (`they_owe_us`), negative means we owe them
+        (`we_owe_them`), zero is `flat`.
+
+        Tenants that do not follow the convention get an empty `data` array
+        plus a `hint` explaining how to opt in.
       responses:
-        '501': { $ref: '#/components/responses/NotImplemented' }
+        '200':
+          description: One entry per provider with per-asset net positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderPositions'
+              examples:
+                twoProviders:
+                  summary: Positive position with Thunes, payable to dLocal
+                  value:
+                    data:
+                      - provider: dlocal
+                        positions:
+                          - asset: USD
+                            exponent: 2
+                            net: '-1200'
+                            direction: we_owe_them
+                            accounts: [9e4f0a61-3d5e-7f80-c193-0c1d2e3f4a51]
+                      - provider: thunes
+                        positions:
+                          - asset: MXN
+                            exponent: 2
+                            net: '30000'
+                            direction: they_owe_us
+                            accounts: [0f5a1b72-4e6f-7081-d2a4-1d2e3f4a5b62]
+                          - asset: USD
+                            exponent: 2
+                            net: '5000'
+                            direction: they_owe_us
+                            accounts: [1a6b2c83-5f70-7192-e3b5-2e3f4a5b6c73]
+                noConvention:
+                  summary: Tenant without provider-named accounts
+                  value:
+                    data: []
+                    hint: >-
+                      no provider accounts found: name accounts as
+                      assets:provider:<name>:... (or
+                      liabilities:provider:<name>:...) or set
+                      metadata.provider on the account
         '401': { $ref: '#/components/responses/Unauthorized' }
 
 components:
@@ -1454,3 +1588,120 @@ components:
                 pattern: '^-?[0-9]{1,19}$'
               balanced:
                 type: boolean
+
+    AssetBalance:
+      type: object
+      description: Per-asset balance signed by the account's normal balance side.
+      required: [asset, exponent, amount]
+      properties:
+        asset:
+          $ref: '#/components/schemas/AssetCode'
+        exponent:
+          type: integer
+          description: Display exponent (decimal places) of the asset.
+        amount:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: Signed int64 minor units, string-encoded.
+
+    StatementEntry:
+      type: object
+      required: [id, transaction_id, direction, amount, effective_at, running_balance]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Posting id.
+        transaction_id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        direction:
+          $ref: '#/components/schemas/Direction'
+        amount:
+          $ref: '#/components/schemas/Money'
+        effective_at:
+          type: string
+          format: date-time
+        running_balance:
+          type: string
+          pattern: '^-?[0-9]{1,19}$'
+          description: >-
+            Balance of the entry's asset after this entry, signed by the
+            account's normal balance side.
+
+    Statement:
+      type: object
+      required: [account, period, opening_balance, entries, closing_balance, next_cursor]
+      properties:
+        account:
+          $ref: '#/components/schemas/Account'
+        period:
+          type: object
+          required: [from, to]
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        opening_balance:
+          type: array
+          description: Balance per asset immediately before the period.
+          items:
+            $ref: '#/components/schemas/AssetBalance'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementEntry'
+        closing_balance:
+          type: array
+          description: Balance per asset at the end of the period.
+          items:
+            $ref: '#/components/schemas/AssetBalance'
+        next_cursor:
+          type: [string, 'null']
+          description: Keyset cursor for the next page of entries.
+
+    ProviderPositions:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [provider, positions]
+            properties:
+              provider:
+                type: string
+                description: Counterparty name, lowercased.
+              positions:
+                type: array
+                items:
+                  type: object
+                  required: [asset, exponent, net, direction, accounts]
+                  properties:
+                    asset:
+                      $ref: '#/components/schemas/AssetCode'
+                    exponent:
+                      type: integer
+                    net:
+                      type: string
+                      pattern: '^-?[0-9]{1,19}$'
+                      description: Signed posted_debits - posted_credits across the provider's accounts.
+                    direction:
+                      type: string
+                      enum: [they_owe_us, we_owe_them, flat]
+                    accounts:
+                      type: array
+                      items:
+                        type: string
+                        format: uuid
+        hint:
+          type: string
+          description: >-
+            Present only when data is empty: explains the naming convention
+            (assets:provider:<name>:...) or the metadata.provider override.

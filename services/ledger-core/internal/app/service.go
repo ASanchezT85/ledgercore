@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -368,7 +369,81 @@ func (s *Service) GetHold(ctx context.Context, tenantID, id uuid.UUID) (domain.H
 // ---- Reports ------------------------------------------------------------------
 
 // TrialBalance aggregates account_balances per account/asset for a ledger and
-// verifies that total debits equal total credits per asset.
-func (s *Service) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID) (domain.TrialBalance, error) {
-	return s.store.TrialBalance(ctx, tenantID, ledgerID)
+// verifies that total debits equal total credits per asset. With asOf set, the
+// report is reconstructed from postings with effective_at <= asOf instead.
+func (s *Service) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID, asOf *time.Time) (domain.TrialBalance, error) {
+	if asOf != nil {
+		t := asOf.UTC()
+		asOf = &t
+	}
+	return s.store.TrialBalance(ctx, tenantID, ledgerID, asOf)
+}
+
+// StatementDefaultPeriod is the lookback window applied when the client does
+// not provide from/to.
+const StatementDefaultPeriod = 30 * 24 * time.Hour
+
+// Statement builds an account statement: opening balance before from, paged
+// entries within [from, to] with per-asset running balances, and the closing
+// balance at to. Zero from/to default to the last 30 days.
+func (s *Service) Statement(ctx context.Context, tenantID, accountID uuid.UUID, from, to time.Time, page Page) (domain.Statement, error) {
+	if accountID == uuid.Nil {
+		return domain.Statement{}, fmt.Errorf("%w: account_id is required", ErrValidation)
+	}
+	if to.IsZero() {
+		to = s.now()
+	}
+	if from.IsZero() {
+		from = to.Add(-StatementDefaultPeriod)
+	}
+	from, to = from.UTC(), to.UTC()
+	if from.After(to) {
+		return domain.Statement{}, fmt.Errorf("%w: from must not be after to", ErrValidation)
+	}
+	return s.store.Statement(ctx, tenantID, accountID, from, to, page)
+}
+
+// ProviderPositions aggregates the net position against every counterparty
+// following the naming convention <type>:provider:<name>:... (or the
+// metadata.provider override) over asset- and liability-type accounts. The
+// aggregation source is account_balances, not postings.
+func (s *Service) ProviderPositions(ctx context.Context, tenantID uuid.UUID) ([]domain.ProviderPosition, error) {
+	rows, err := s.store.ProviderAccountBalances(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	type key struct{ provider, asset string }
+	nets := make(map[key]*domain.ProviderAssetPosition)
+	providers := make(map[string][]string) // provider -> ordered asset keys
+	var order []string
+	for _, r := range rows {
+		provider, ok := domain.ProviderOf(r.Path, r.Metadata)
+		if !ok {
+			continue
+		}
+		k := key{provider, r.Asset}
+		pos, ok := nets[k]
+		if !ok {
+			pos = &domain.ProviderAssetPosition{Asset: r.Asset}
+			nets[k] = pos
+			if _, seen := providers[provider]; !seen {
+				order = append(order, provider)
+			}
+			providers[provider] = append(providers[provider], r.Asset)
+		}
+		pos.Net += r.PostedDebits - r.PostedCredits
+		pos.Accounts = append(pos.Accounts, r.AccountID)
+	}
+	sort.Strings(order)
+	out := make([]domain.ProviderPosition, 0, len(order))
+	for _, provider := range order {
+		assets := providers[provider]
+		sort.Strings(assets)
+		p := domain.ProviderPosition{Provider: provider}
+		for _, asset := range assets {
+			p.Positions = append(p.Positions, *nets[key{provider, asset}])
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }

@@ -341,3 +341,75 @@ func TestAssetExponent(t *testing.T) {
 		t.Error("unknown assets should fall back to the default exponent")
 	}
 }
+
+// ---- Statement running balance -------------------------------------------------
+
+func TestRunningBalance(t *testing.T) {
+	// A credit-normal wallet: opening raw is debits-credits, so a wallet that
+	// received 9700 in credits has raw -9700 and signed opening 9700.
+	openingRaw := int64(-9700)
+	if got := SignRaw(NormalCredit, openingRaw); got != 9700 {
+		t.Fatalf("signed opening = %d, want 9700", got)
+	}
+	// Entries: +500 credit, -200 debit, +100 credit (raw cumulative window
+	// values as SQL would produce them: debit positive, credit negative).
+	steps := []struct {
+		dir  Direction
+		amt  int64
+		want int64 // running balance after the entry, credit-normal signed
+	}{
+		{DirectionCredit, 500, 10200},
+		{DirectionDebit, 200, 10000},
+		{DirectionCredit, 100, 10100},
+	}
+	cum := int64(0)
+	for i, s := range steps {
+		if s.dir == DirectionDebit {
+			cum += s.amt
+		} else {
+			cum -= s.amt
+		}
+		if got := RunningBalance(NormalCredit, openingRaw, cum); got != s.want {
+			t.Errorf("step %d: running = %d, want %d", i, got, s.want)
+		}
+	}
+	// Debit-normal accounts keep the raw sign.
+	if got := RunningBalance(NormalDebit, 1000, 250); got != 1250 {
+		t.Errorf("debit-normal running = %d, want 1250", got)
+	}
+	if got := SignRaw(NormalDebit, -300); got != -300 {
+		t.Errorf("debit-normal negative = %d, want -300", got)
+	}
+}
+
+// ---- Provider convention parser ------------------------------------------------
+
+func TestProviderOf(t *testing.T) {
+	cases := []struct {
+		name     string
+		path     string
+		metadata map[string]string
+		want     string
+		ok       bool
+	}{
+		{"colon convention", "assets:provider:thunes:usd", nil, "thunes", true},
+		{"slash convention", "liabilities/provider/dlocal/mxn", nil, "dlocal", true},
+		{"mixed separators", "assets:provider/uniteller:usd", nil, "uniteller", true},
+		{"metadata override wins", "assets:cash", map[string]string{"provider": "Thunes"}, "thunes", true},
+		{"metadata on conventional path wins", "assets:provider:thunes:usd", map[string]string{"provider": "other"}, "other", true},
+		{"no convention", "customer:c1:wallet", nil, "", false},
+		{"provider segment last, no name", "assets:provider", nil, "", false},
+		{"empty path", "", nil, "", false},
+		{"case-insensitive segment", "Assets:Provider:Thunes", nil, "thunes", true},
+		{"whitespace-only metadata ignored", "assets:cash", map[string]string{"provider": "  "}, "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := ProviderOf(c.path, c.metadata)
+			if got != c.want || ok != c.ok {
+				t.Errorf("ProviderOf(%q, %v) = (%q, %v), want (%q, %v)",
+					c.path, c.metadata, got, ok, c.want, c.ok)
+			}
+		})
+	}
+}

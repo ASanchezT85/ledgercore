@@ -279,7 +279,7 @@ func TestReverseTransaction(t *testing.T) {
 	}
 
 	// The trial balance stays balanced after the full cycle.
-	tb, err := s.TrialBalance(ctx, f.tenantID, f.ledger.ID)
+	tb, err := s.TrialBalance(ctx, f.tenantID, f.ledger.ID, nil)
 	if err != nil {
 		t.Fatalf("trial balance: %v", err)
 	}

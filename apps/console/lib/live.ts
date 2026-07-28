@@ -101,6 +101,31 @@ export interface ApiTrialBalance {
   totals: TrialBalanceTotal[];
 }
 
+export interface ApiAssetBalance {
+  asset: string;
+  exponent: number;
+  amount: string; // signed int64 minor units, string-encoded
+}
+
+export interface ApiStatementEntry {
+  id: string;
+  transaction_id: string;
+  reference?: string;
+  direction: Direction;
+  amount: Money;
+  effective_at: string;
+  running_balance: string;
+}
+
+export interface ApiStatement {
+  account: ApiAccount;
+  period: { from: string; to: string };
+  opening_balance: ApiAssetBalance[];
+  entries: ApiStatementEntry[];
+  closing_balance: ApiAssetBalance[];
+  next_cursor: string | null;
+}
+
 interface Page<T> {
   data: T[];
   next_cursor?: string | null;
@@ -174,6 +199,17 @@ export function listTransactions(
 ): Promise<Page<ApiTransaction>> {
   const q = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
   return apiFetch<Page<ApiTransaction>>(`/v1/transactions?limit=${limit}${q}`);
+}
+
+export function getStatement(
+  accountId: string,
+  cursor?: string,
+  limit = 100,
+): Promise<ApiStatement> {
+  const q = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<ApiStatement>(
+    `/v1/statements?account_id=${encodeURIComponent(accountId)}&limit=${limit}${q}`,
+  );
 }
 
 export function getTrialBalance(ledgerId: string): Promise<ApiTrialBalance> {

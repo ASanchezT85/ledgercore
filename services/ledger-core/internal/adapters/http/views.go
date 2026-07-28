@@ -276,6 +276,136 @@ func newTrialBalanceView(tb domain.TrialBalance) trialBalanceView {
 	return out
 }
 
+// ---- statements ----------------------------------------------------------------
+
+type assetBalanceView struct {
+	Asset    string `json:"asset"`
+	Exponent int    `json:"exponent"`
+	Amount   string `json:"amount"`
+}
+
+func newAssetBalanceViews(balances []domain.AssetBalance) []assetBalanceView {
+	out := make([]assetBalanceView, len(balances))
+	for i, b := range balances {
+		out[i] = assetBalanceView{
+			Asset:    b.Asset,
+			Exponent: domain.AssetExponent(b.Asset),
+			Amount:   strconv.FormatInt(b.Units, 10),
+		}
+	}
+	return out
+}
+
+type statementEntryView struct {
+	ID             uuid.UUID `json:"id"`
+	TransactionID  uuid.UUID `json:"transaction_id"`
+	Reference      string    `json:"reference,omitempty"`
+	Direction      string    `json:"direction"`
+	Amount         moneyView `json:"amount"`
+	EffectiveAt    time.Time `json:"effective_at"`
+	RunningBalance string    `json:"running_balance"`
+}
+
+type statementPeriodView struct {
+	From time.Time `json:"from"`
+	To   time.Time `json:"to"`
+}
+
+type statementView struct {
+	Account        accountView          `json:"account"`
+	Period         statementPeriodView  `json:"period"`
+	OpeningBalance []assetBalanceView   `json:"opening_balance"`
+	Entries        []statementEntryView `json:"entries"`
+	ClosingBalance []assetBalanceView   `json:"closing_balance"`
+	NextCursor     *string              `json:"next_cursor"`
+}
+
+func newStatementView(st domain.Statement, limit int) statementView {
+	out := statementView{
+		Account:        newAccountView(st.Account),
+		Period:         statementPeriodView{From: st.From, To: st.To},
+		OpeningBalance: newAssetBalanceViews(st.Opening),
+		ClosingBalance: newAssetBalanceViews(st.Closing),
+		Entries:        make([]statementEntryView, len(st.Entries)),
+	}
+	for i, e := range st.Entries {
+		out.Entries[i] = statementEntryView{
+			ID:             e.PostingID,
+			TransactionID:  e.TransactionID,
+			Reference:      e.Reference,
+			Direction:      string(e.Direction),
+			Amount:         newMoneyView(e.Amount),
+			EffectiveAt:    e.EffectiveAt,
+			RunningBalance: strconv.FormatInt(e.Running, 10),
+		}
+	}
+	if n := len(st.Entries); n > 0 {
+		last := st.Entries[n-1]
+		out.NextCursor = nextCursor(n, limit, last.EffectiveAt, last.PostingID)
+	}
+	return out
+}
+
+// ---- provider positions --------------------------------------------------------
+
+type providerAssetPositionView struct {
+	Asset     string      `json:"asset"`
+	Exponent  int         `json:"exponent"`
+	Net       string      `json:"net"`
+	Direction string      `json:"direction"` // they_owe_us | we_owe_them | flat
+	Accounts  []uuid.UUID `json:"accounts"`
+}
+
+type providerPositionView struct {
+	Provider  string                      `json:"provider"`
+	Positions []providerAssetPositionView `json:"positions"`
+}
+
+type providerPositionsResponse struct {
+	Data []providerPositionView `json:"data"`
+	Hint string                 `json:"hint,omitempty"`
+}
+
+// providerPositionsHint guides tenants that do not follow the naming
+// convention: without it (or the metadata override) the report is empty.
+const providerPositionsHint = "no provider accounts found: name accounts as " +
+	"assets:provider:<name>:... (or liabilities:provider:<name>:...) or set metadata.provider on the account"
+
+func positionDirection(net int64) string {
+	switch {
+	case net > 0:
+		return "they_owe_us"
+	case net < 0:
+		return "we_owe_them"
+	default:
+		return "flat"
+	}
+}
+
+func newProviderPositionsView(positions []domain.ProviderPosition) providerPositionsResponse {
+	out := providerPositionsResponse{Data: make([]providerPositionView, len(positions))}
+	for i, p := range positions {
+		v := providerPositionView{
+			Provider:  p.Provider,
+			Positions: make([]providerAssetPositionView, len(p.Positions)),
+		}
+		for j, pos := range p.Positions {
+			v.Positions[j] = providerAssetPositionView{
+				Asset:     pos.Asset,
+				Exponent:  domain.AssetExponent(pos.Asset),
+				Net:       strconv.FormatInt(pos.Net, 10),
+				Direction: positionDirection(pos.Net),
+				Accounts:  pos.Accounts,
+			}
+		}
+		out.Data[i] = v
+	}
+	if len(out.Data) == 0 {
+		out.Hint = providerPositionsHint
+	}
+	return out
+}
+
 // listResponse is the standard paginated collection shape.
 type listResponse[T any] struct {
 	Data       []T     `json:"data"`

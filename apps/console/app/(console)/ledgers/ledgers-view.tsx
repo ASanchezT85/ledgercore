@@ -1,6 +1,8 @@
 "use client";
 
-import { BookOpenText, CornerDownRight, FolderTree } from "lucide-react";
+import { BookOpenText, CornerDownRight, FileText, FolderTree } from "lucide-react";
+import { useState } from "react";
+import { StatementDrawer } from "@/components/statement-drawer";
 import { DemoBadge } from "@/components/demo-badge";
 import {
   ApiDownBanner,
@@ -31,7 +33,16 @@ interface TreeNode {
   fullPath: string;
   balances: DisplayBalance[] | null;
   status?: string;
+  /** Real account id (live data only) — enables the Statement drawer. */
+  accountId?: string;
   children: TreeNode[];
+}
+
+interface AccountRow {
+  name: string;
+  balances: DisplayBalance[];
+  status?: string;
+  accountId?: string;
 }
 
 /**
@@ -39,9 +50,7 @@ interface TreeNode {
  * colon-namespaced convention (customer:cust_42:wallet); the demo dataset
  * uses slash-separated paths. Both are treated as segment separators.
  */
-function buildTree(
-  accounts: Array<{ name: string; balances: DisplayBalance[]; status?: string }>,
-): TreeNode[] {
+function buildTree(accounts: AccountRow[]): TreeNode[] {
   const roots: TreeNode[] = [];
   for (const account of accounts) {
     const segments = account.name.split(/[:/]/).filter(Boolean);
@@ -57,6 +66,7 @@ function buildTree(
       if (index === segments.length - 1) {
         node.balances = account.balances;
         node.status = account.status;
+        node.accountId = account.accountId;
       }
       level = node.children;
     });
@@ -64,7 +74,15 @@ function buildTree(
   return roots;
 }
 
-function TreeBranch({ node, depth }: { node: TreeNode; depth: number }) {
+function TreeBranch({
+  node,
+  depth,
+  onStatement,
+}: {
+  node: TreeNode;
+  depth: number;
+  onStatement?: (accountId: string, name: string) => void;
+}) {
   return (
     <li>
       <div
@@ -93,7 +111,18 @@ function TreeBranch({ node, depth }: { node: TreeNode; depth: number }) {
           )}
         </div>
         {node.balances && (
-          <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <div className="flex shrink-0 items-center gap-3">
+            {node.accountId && onStatement && (
+              <button
+                type="button"
+                onClick={() => onStatement(node.accountId!, node.fullPath)}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-(--radius-control) border border-edge-strong px-2 py-1 text-[11px] text-ink-muted transition-colors hover:border-accent/60 hover:text-accent"
+              >
+                <FileText size={11} aria-hidden="true" />
+                Statement
+              </button>
+            )}
+            <div className="flex flex-col items-end gap-0.5">
             {node.balances.length === 0 && (
               <span className="text-xs text-ink-faint">sin movimientos</span>
             )}
@@ -105,13 +134,19 @@ function TreeBranch({ node, depth }: { node: TreeNode; depth: number }) {
                 {formatMoneyWithAsset(balance.units, balance.asset, balance.exponent)}
               </span>
             ))}
+            </div>
           </div>
         )}
       </div>
       {node.children.length > 0 && (
         <ul>
           {node.children.map((child) => (
-            <TreeBranch key={child.fullPath} node={child} depth={depth + 1} />
+            <TreeBranch
+              key={child.fullPath}
+              node={child}
+              depth={depth + 1}
+              onStatement={onStatement}
+            />
           ))}
         </ul>
       )}
@@ -124,11 +159,13 @@ function LedgerCard({
   description,
   environment,
   accounts,
+  onStatement,
 }: {
   name: string;
   description: string;
   environment?: string;
-  accounts: Array<{ name: string; balances: DisplayBalance[]; status?: string }>;
+  accounts: AccountRow[];
+  onStatement?: (accountId: string, name: string) => void;
 }) {
   return (
     <Card
@@ -164,7 +201,12 @@ function LedgerCard({
       ) : (
         <ul>
           {buildTree(accounts).map((node) => (
-            <TreeBranch key={node.fullPath} node={node} depth={0} />
+            <TreeBranch
+              key={node.fullPath}
+              node={node}
+              depth={0}
+              onStatement={onStatement}
+            />
           ))}
         </ul>
       )}
@@ -173,6 +215,10 @@ function LedgerCard({
 }
 
 function LiveLedgers({ data }: { data: LedgerWithAccounts[] }) {
+  const [statementFor, setStatementFor] = useState<{
+    accountId: string;
+    name: string;
+  } | null>(null);
   if (data.length === 0) {
     return (
       <EmptyState
@@ -191,9 +237,11 @@ function LiveLedgers({ data }: { data: LedgerWithAccounts[] }) {
           name={ledger.name}
           description={ledger.description ?? ""}
           environment={ledger.environment}
+          onStatement={(accountId, name) => setStatementFor({ accountId, name })}
           accounts={accounts.map(({ account, balances }) => ({
             name: account.name,
             status: account.status,
+            accountId: account.id,
             balances: balances.map((b) => ({
               asset: b.asset,
               exponent: b.exponent,
@@ -202,6 +250,13 @@ function LiveLedgers({ data }: { data: LedgerWithAccounts[] }) {
           }))}
         />
       ))}
+      {statementFor && (
+        <StatementDrawer
+          accountId={statementFor.accountId}
+          accountName={statementFor.name}
+          onClose={() => setStatementFor(null)}
+        />
+      )}
     </>
   );
 }

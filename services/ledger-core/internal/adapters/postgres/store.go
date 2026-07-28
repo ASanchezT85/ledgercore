@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -1036,9 +1037,15 @@ func (s *Store) GetHold(ctx context.Context, tenantID, id uuid.UUID) (domain.Hol
 // ---- reports ------------------------------------------------------------------
 
 // TrialBalance aggregates account_balances per account/asset for a ledger and
-// computes per-asset totals with the debits == credits sanity check.
-func (s *Store) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID) (domain.TrialBalance, error) {
+// computes per-asset totals with the debits == credits sanity check. When asOf
+// is set, the state is reconstructed by aggregating postings of transactions
+// with effective_at <= asOf (posted or later reversed) instead of reading the
+// running account_balances.
+func (s *Store) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID, asOf *time.Time) (domain.TrialBalance, error) {
 	out := domain.TrialBalance{LedgerID: ledgerID, AsOf: time.Now().UTC()}
+	if asOf != nil {
+		out.AsOf = *asOf
+	}
 	err := pgxutil.WithTenantTx(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
 		var one int
 		err := tx.QueryRow(ctx, `SELECT 1 FROM ledgers WHERE id = $1`, ledgerID).Scan(&one)
@@ -1048,14 +1055,31 @@ func (s *Store) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID) 
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `
-			SELECT b.account_id, a.name, a.type, b.asset, b.posted_debits, b.posted_credits
-			FROM account_balances b
-			JOIN accounts a ON a.id = b.account_id
-			WHERE a.ledger_id = $1
-			ORDER BY a.path, b.asset`, ledgerID)
-		if err != nil {
-			return err
+		var rows pgx.Rows
+		if asOf == nil {
+			rows, err = tx.Query(ctx, `
+				SELECT b.account_id, a.name, a.type, b.asset, b.posted_debits, b.posted_credits
+				FROM account_balances b
+				JOIN accounts a ON a.id = b.account_id
+				WHERE a.ledger_id = $1
+				ORDER BY a.path, b.asset`, ledgerID)
+		} else {
+			// Historical reconstruction from postings. A 'reversed' status
+			// means the transaction WAS posted and later compensated: its
+			// postings still count at any as_of on or after its effective_at
+			// (the reversal carries its own, later, effective_at).
+			rows, err = tx.Query(ctx, `
+				SELECT p.account_id, a.name, a.type, p.asset,
+				       COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'),  0),
+				       COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0)
+				FROM postings p
+				JOIN transactions t ON t.id = p.transaction_id
+				JOIN accounts a ON a.id = p.account_id
+				WHERE a.ledger_id = $1
+				  AND t.status IN ('posted', 'reversed')
+				  AND t.effective_at <= $2
+				GROUP BY p.account_id, a.name, a.path, a.type, p.asset
+				ORDER BY a.path, p.asset`, ledgerID, *asOf)
 		}
 		defer rows.Close()
 		totals := make(map[string]*domain.TrialBalanceTotal)
@@ -1086,6 +1110,154 @@ func (s *Store) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID) 
 			out.Totals = append(out.Totals, *t)
 		}
 		return nil
+	})
+	return out, err
+}
+
+// statementRawSums aggregates the raw (debits - credits) sum per asset over
+// the postings of an account within a time filter. SQL does all summing.
+func statementRawSums(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, cond string, args ...any) (map[string]int64, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT p.asset,
+		       COALESCE(SUM(CASE WHEN p.direction = 'DEBIT' THEN p.amount ELSE -p.amount END), 0)
+		FROM postings p
+		JOIN transactions t ON t.id = p.transaction_id
+		WHERE p.account_id = $1
+		  AND t.status IN ('posted', 'reversed')
+		  AND `+cond+`
+		GROUP BY p.asset`, append([]any{accountID}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]int64)
+	for rows.Next() {
+		var asset string
+		var raw int64
+		if err := rows.Scan(&asset, &raw); err != nil {
+			return nil, err
+		}
+		out[asset] = raw
+	}
+	return out, rows.Err()
+}
+
+// Statement builds the account statement for [from, to]: the opening balance
+// aggregates postings with effective_at < from, entries carry a per-asset
+// running balance computed with a SQL window function over the whole period
+// (so pagination never breaks the accumulation), and the closing balance is
+// opening + the period totals. All sums happen in SQL.
+func (s *Store) Statement(ctx context.Context, tenantID, accountID uuid.UUID, from, to time.Time, page app.Page) (domain.Statement, error) {
+	cAt, cID := cursorArgs(page.Cursor)
+	var out domain.Statement
+	err := pgxutil.WithTenantTx(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
+		account, err := getAccountTx(ctx, tx, accountID)
+		if err != nil {
+			return err
+		}
+		out = domain.Statement{Account: account, From: from, To: to}
+		nb := account.NormalBalance
+
+		// Opening: everything strictly before the period.
+		openingRaw, err := statementRawSums(ctx, tx, accountID, `t.effective_at < $2`, from)
+		if err != nil {
+			return err
+		}
+		// Period totals: closing = opening + period, per asset.
+		periodRaw, err := statementRawSums(ctx, tx, accountID,
+			`t.effective_at >= $2 AND t.effective_at <= $3`, from, to)
+		if err != nil {
+			return err
+		}
+
+		assets := make(map[string]bool, len(openingRaw)+len(periodRaw))
+		for a := range openingRaw {
+			assets[a] = true
+		}
+		for a := range periodRaw {
+			assets[a] = true
+		}
+		names := make([]string, 0, len(assets))
+		for a := range assets {
+			names = append(names, a)
+		}
+		sort.Strings(names)
+		for _, a := range names {
+			out.Opening = append(out.Opening, domain.AssetBalance{
+				Asset: a, Units: domain.SignRaw(nb, openingRaw[a])})
+			out.Closing = append(out.Closing, domain.AssetBalance{
+				Asset: a, Units: domain.RunningBalance(nb, openingRaw[a], periodRaw[a])})
+		}
+
+		// Entries: the window runs over the WHOLE period partitioned by
+		// asset; the keyset cursor and LIMIT are applied outside, so every
+		// page sees the correct cumulative value.
+		rows, err := tx.Query(ctx, `
+			WITH period AS (
+				SELECT p.id, p.transaction_id, t.reference, p.direction, p.asset, p.amount,
+				       t.effective_at,
+				       SUM(CASE WHEN p.direction = 'DEBIT' THEN p.amount ELSE -p.amount END)
+				           OVER (PARTITION BY p.asset ORDER BY t.effective_at, p.id) AS running_raw
+				FROM postings p
+				JOIN transactions t ON t.id = p.transaction_id
+				WHERE p.account_id = $1
+				  AND t.status IN ('posted', 'reversed')
+				  AND t.effective_at >= $2 AND t.effective_at <= $3
+			)
+			SELECT id, transaction_id, reference, direction, asset, amount, effective_at, running_raw
+			FROM period
+			WHERE ($4::timestamptz IS NULL OR (effective_at, id) > ($4, $5::uuid))
+			ORDER BY effective_at, id
+			LIMIT $6`, accountID, from, to, cAt, cID, normalizeLimit(page.Limit))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e domain.StatementEntry
+			var dir, asset string
+			var units, runningRaw int64
+			if err := rows.Scan(&e.PostingID, &e.TransactionID, &e.Reference, &dir, &asset,
+				&units, &e.EffectiveAt, &runningRaw); err != nil {
+				return err
+			}
+			e.Direction = domain.Direction(dir)
+			e.Amount = money.Amount{Asset: asset, Units: units}
+			e.Running = domain.RunningBalance(nb, openingRaw[asset], runningRaw)
+			out.Entries = append(out.Entries, e)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// ProviderAccountBalances returns the per-account/asset posted sums of every
+// asset- or liability-type account of the tenant, straight from
+// account_balances (never postings).
+func (s *Store) ProviderAccountBalances(ctx context.Context, tenantID uuid.UUID) ([]domain.ProviderAccountBalance, error) {
+	var out []domain.ProviderAccountBalance
+	err := pgxutil.WithTenantTx(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT a.id, a.path, a.type, a.metadata, b.asset, b.posted_debits, b.posted_credits
+			FROM account_balances b
+			JOIN accounts a ON a.id = b.account_id
+			WHERE a.type IN ('asset', 'liability')
+			ORDER BY a.path, b.asset`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r domain.ProviderAccountBalance
+			var typ string
+			if err := rows.Scan(&r.AccountID, &r.Path, &typ, &r.Metadata,
+				&r.Asset, &r.PostedDebits, &r.PostedCredits); err != nil {
+				return err
+			}
+			r.Type = domain.AccountType(typ)
+			out = append(out, r)
+		}
+		return rows.Err()
 	})
 	return out, err
 }

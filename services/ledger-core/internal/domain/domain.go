@@ -6,6 +6,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -200,6 +201,104 @@ func (b Balance) PendingNet(nb NormalBalance) int64 {
 // Available is what can be spent right now: posted net minus active holds.
 func (b Balance) Available(nb NormalBalance) int64 {
 	return b.PostedNet(nb) - b.Held
+}
+
+// StatementEntry is one line of an account statement: a posting with its
+// transaction context and the running balance after it.
+type StatementEntry struct {
+	PostingID     uuid.UUID
+	TransactionID uuid.UUID
+	Reference     string
+	Direction     Direction
+	Amount        money.Amount
+	EffectiveAt   time.Time
+	// Running is the balance after this entry, signed by the account's
+	// normal balance side.
+	Running int64
+}
+
+// AssetBalance is a per-asset signed balance snapshot.
+type AssetBalance struct {
+	Asset string
+	Units int64 // signed by the account's normal balance side
+}
+
+// Statement is the account statement over a period: opening balance before
+// From, the entries within [From, To] with running balances, and the closing
+// balance at To.
+type Statement struct {
+	Account Account
+	From    time.Time
+	To      time.Time
+	Opening []AssetBalance
+	Closing []AssetBalance
+	Entries []StatementEntry
+}
+
+// SignRaw converts a raw debit-minus-credit sum into a balance signed by the
+// account's normal side: debit-normal accounts grow with debits, credit-normal
+// accounts grow with credits.
+func SignRaw(nb NormalBalance, raw int64) int64 {
+	if nb == NormalDebit {
+		return raw
+	}
+	return -raw
+}
+
+// RunningBalance composes the opening raw sum (debits-credits before the
+// period) with the cumulative raw sum up to a statement line, signed by the
+// account's normal balance.
+func RunningBalance(nb NormalBalance, openingRaw, cumulativeRaw int64) int64 {
+	return SignRaw(nb, openingRaw+cumulativeRaw)
+}
+
+// ---- Provider positions ------------------------------------------------------
+
+// ProviderAccountBalance is one account/asset aggregate used to compute
+// counterparty (provider) positions. Raw sums come from account_balances.
+type ProviderAccountBalance struct {
+	AccountID     uuid.UUID
+	Path          string
+	Type          AccountType
+	Metadata      map[string]string
+	Asset         string
+	PostedDebits  int64
+	PostedCredits int64
+}
+
+// ProviderAssetPosition is the net position against one provider in one asset.
+type ProviderAssetPosition struct {
+	Asset string
+	// Net is the signed raw sum (debits - credits) across the provider's
+	// accounts: positive means the counterparty holds value for us
+	// (they_owe_us), negative means we owe them.
+	Net      int64
+	Accounts []uuid.UUID
+}
+
+// ProviderPosition groups the per-asset positions of one provider.
+type ProviderPosition struct {
+	Provider  string
+	Positions []ProviderAssetPosition
+}
+
+// ProviderOf extracts the counterparty name of an account. metadata.provider
+// wins as an explicit override; otherwise the account path must follow the
+// convention <type>:provider:<name>:... (":" or "/" both accepted as
+// separators, e.g. "assets:provider:thunes:usd" or
+// "liabilities/provider/dlocal/mxn"). The bool reports whether the account
+// identifies a provider at all.
+func ProviderOf(path string, metadata map[string]string) (string, bool) {
+	if p := strings.TrimSpace(metadata["provider"]); p != "" {
+		return strings.ToLower(p), true
+	}
+	segs := strings.FieldsFunc(path, func(r rune) bool { return r == ':' || r == '/' })
+	for i := 0; i+1 < len(segs); i++ {
+		if strings.EqualFold(segs[i], "provider") && segs[i+1] != "" {
+			return strings.ToLower(segs[i+1]), true
+		}
+	}
+	return "", false
 }
 
 // TrialBalanceRow is one account/asset aggregate of the trial balance.

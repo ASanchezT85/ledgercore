@@ -62,5 +62,16 @@ type Store interface {
 	ReleaseHold(ctx context.Context, tenantID, id uuid.UUID, now time.Time) (domain.Hold, error)
 	GetHold(ctx context.Context, tenantID, id uuid.UUID) (domain.Hold, error)
 
-	TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID) (domain.TrialBalance, error)
+	// TrialBalance reports the current state (from account_balances) when
+	// asOf is nil, or reconstructs the historical state by aggregating
+	// postings with effective_at <= asOf.
+	TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID, asOf *time.Time) (domain.TrialBalance, error)
+
+	// Statement builds the account statement for [from, to]: opening balance
+	// before from, paged entries with running balances, and closing balance.
+	Statement(ctx context.Context, tenantID, accountID uuid.UUID, from, to time.Time, page Page) (domain.Statement, error)
+
+	// ProviderAccountBalances returns the account/asset aggregates of every
+	// asset- or liability-type account, read from account_balances.
+	ProviderAccountBalances(ctx context.Context, tenantID uuid.UUID) ([]domain.ProviderAccountBalance, error)
 }
