@@ -118,12 +118,24 @@ func (f *fakeStore) ListActiveSigningKeys(_ context.Context) ([]domain.SigningKe
 	return out, nil
 }
 
+func (f *fakeStore) UpdateSigningKeyPrivatePEM(_ context.Context, kid uuid.UUID, privateKeyPEM string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, k := range f.signing {
+		if k.Kid == kid {
+			f.signing[i].PrivateKeyPEM = privateKeyPEM
+			return nil
+		}
+	}
+	return domain.ErrNotFound
+}
+
 // ---- Helpers ---------------------------------------------------------
 
 func newTestService(t *testing.T) (*Service, *fakeStore) {
 	t.Helper()
 	store := newFakeStore()
-	signingKey, err := EnsureSigningKey(context.Background(), store)
+	signingKey, err := EnsureSigningKey(context.Background(), store, nil)
 	if err != nil {
 		t.Fatalf("EnsureSigningKey: %v", err)
 	}
@@ -138,11 +150,11 @@ func newTestService(t *testing.T) (*Service, *fakeStore) {
 
 func TestEnsureSigningKeyIsIdempotent(t *testing.T) {
 	store := newFakeStore()
-	first, err := EnsureSigningKey(context.Background(), store)
+	first, err := EnsureSigningKey(context.Background(), store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := EnsureSigningKey(context.Background(), store)
+	second, err := EnsureSigningKey(context.Background(), store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

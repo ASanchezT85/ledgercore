@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
+	"github.com/ledgercore/ledgercore/services/identity/internal/keycrypt"
 )
 
 // DefaultScopes are the scopes granted to every token issued from an API key.
@@ -53,6 +54,9 @@ type APIKeyRepository interface {
 type SigningKeyRepository interface {
 	InsertSigningKey(ctx context.Context, k domain.SigningKey) error
 	ListActiveSigningKeys(ctx context.Context) ([]domain.SigningKey, error)
+	// UpdateSigningKeyPrivatePEM replaces the stored private-key material of
+	// an existing key (used to re-encrypt legacy plaintext keys at startup).
+	UpdateSigningKeyPrivatePEM(ctx context.Context, kid uuid.UUID, privateKeyPEM string) error
 }
 
 // ---- Service ------------------------------------------------------------------
@@ -80,25 +84,70 @@ func NewService(tenants TenantRepository, keys APIKeyRepository, signing Signing
 // EnsureSigningKey returns the newest active signing key, generating and
 // persisting one if none exists yet. Called once at startup.
 //
-// TODO(kms): in production the key must be created inside a KMS/HSM and the
-// service should sign via the KMS API; this database bootstrap is dev-only.
-func EnsureSigningKey(ctx context.Context, repo SigningKeyRepository) (domain.SigningKey, error) {
+// When a master-key cipher is provided (LEDGERCORE_MASTER_KEY), private-key
+// material is envelope-encrypted (AES-256-GCM, AAD = kid) before it touches
+// the database, and any legacy plaintext key found at startup is transparently
+// re-encrypted in place. The returned key always carries the plaintext PEM
+// in memory so the token issuer can sign.
+//
+// TODO(kms): the road to a managed KMS/HSM (sign via the KMS API, private key
+// never in process memory) is deferred to the cloud stage; this envelope
+// scheme is the pragmatic fit for the shared-VPS deployment.
+func EnsureSigningKey(ctx context.Context, repo SigningKeyRepository, cipher *keycrypt.Cipher) (domain.SigningKey, error) {
 	existing, err := repo.ListActiveSigningKeys(ctx)
 	if err != nil {
 		return domain.SigningKey{}, fmt.Errorf("app: list signing keys: %w", err)
 	}
 	if len(existing) > 0 {
-		slog.Info("using existing signing key", "kid", existing[0].Kid)
-		return existing[0], nil
+		// Transparent migration: with a master key present, EVERY active key
+		// still stored in the clear gets re-encrypted in place (older active
+		// keys keep serving the JWKS, so they must not stay in plaintext).
+		if cipher != nil {
+			for _, k := range existing {
+				if keycrypt.IsEncrypted(k.PrivateKeyPEM) {
+					continue
+				}
+				sealed, err := cipher.Encrypt(k.PrivateKeyPEM, k.Kid.String())
+				if err != nil {
+					return domain.SigningKey{}, fmt.Errorf("app: encrypt signing key %s: %w", k.Kid, err)
+				}
+				if err := repo.UpdateSigningKeyPrivatePEM(ctx, k.Kid, sealed); err != nil {
+					return domain.SigningKey{}, fmt.Errorf("app: re-encrypt signing key %s: %w", k.Kid, err)
+				}
+				slog.Info("signing key encrypted at rest", "kid", k.Kid.String())
+			}
+		}
+		key := existing[0]
+		if keycrypt.IsEncrypted(key.PrivateKeyPEM) {
+			plain, err := cipher.Decrypt(key.PrivateKeyPEM, key.Kid.String())
+			if err != nil {
+				return domain.SigningKey{}, fmt.Errorf("app: decrypt signing key %s: %w", key.Kid, err)
+			}
+			key.PrivateKeyPEM = plain
+		}
+		slog.Info("using existing signing key", "kid", key.Kid, "encrypted_at_rest", cipher != nil)
+		return key, nil
 	}
 	key, err := domain.GenerateSigningKey()
 	if err != nil {
 		return domain.SigningKey{}, err
 	}
-	if err := repo.InsertSigningKey(ctx, key); err != nil {
+	stored := key
+	if cipher != nil {
+		sealed, err := cipher.Encrypt(key.PrivateKeyPEM, key.Kid.String())
+		if err != nil {
+			return domain.SigningKey{}, fmt.Errorf("app: encrypt signing key %s: %w", key.Kid, err)
+		}
+		stored.PrivateKeyPEM = sealed
+	}
+	if err := repo.InsertSigningKey(ctx, stored); err != nil {
 		return domain.SigningKey{}, fmt.Errorf("app: persist signing key: %w", err)
 	}
-	slog.Info("generated new signing key", "kid", key.Kid, "algorithm", key.Algorithm)
+	if cipher != nil {
+		slog.Info("generated new signing key (encrypted at rest)", "kid", key.Kid, "algorithm", key.Algorithm)
+	} else {
+		slog.Info("generated new signing key", "kid", key.Kid, "algorithm", key.Algorithm)
+	}
 	return key, nil
 }
 

@@ -123,6 +123,10 @@ services:
       LEDGERCORE_AUTH_DISABLED: "true"
       # Bootstrap token for system-level endpoints (create tenants/API keys).
       LEDGERCORE_ADMIN_TOKEN: "dev-admin-token"
+      # Dev-only master key (encrypts signing keys at rest; see keycrypt).
+      # Overridable so a stack that already re-encrypted with a custom key
+      # keeps decrypting. NEVER reuse this value outside local dev.
+      LEDGERCORE_MASTER_KEY: "${LEDGERCORE_MASTER_KEY:-6465762d6f6e6c792d6d61737465722d6b65792d33322d62797465732d646576}"
     ports:
       - "8082:8082"
     depends_on:

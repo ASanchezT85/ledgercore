@@ -165,6 +165,23 @@ func (s *Store) InsertSigningKey(ctx context.Context, k domain.SigningKey) error
 	return nil
 }
 
+// UpdateSigningKeyPrivatePEM replaces the stored private-key material of an
+// existing key. Used at startup to re-encrypt legacy plaintext keys once a
+// master key (LEDGERCORE_MASTER_KEY) is configured.
+func (s *Store) UpdateSigningKeyPrivatePEM(ctx context.Context, kid uuid.UUID, privateKeyPEM string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE signing_keys SET private_key_pem = $2 WHERE kid = $1`,
+		kid, privateKeyPEM,
+	)
+	if err != nil {
+		return fmt.Errorf("postgres: update signing key private pem: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // ListActiveSigningKeys returns active keys, newest first (the first one is
 // used for signing; all of them are served in the JWKS).
 func (s *Store) ListActiveSigningKeys(ctx context.Context) ([]domain.SigningKey, error) {

@@ -23,6 +23,7 @@ import (
 	"github.com/ledgercore/ledgercore/services/identity/internal/adapters/outbox"
 	"github.com/ledgercore/ledgercore/services/identity/internal/adapters/postgres"
 	"github.com/ledgercore/ledgercore/services/identity/internal/app"
+	"github.com/ledgercore/ledgercore/services/identity/internal/keycrypt"
 )
 
 const (
@@ -36,6 +37,7 @@ type config struct {
 	databaseURL   string
 	natsURL       string
 	adminToken    string
+	masterKey     string // LEDGERCORE_MASTER_KEY: 32-byte hex; encrypts signing keys at rest
 	autoMigrate   bool
 	env           string // LEDGERCORE_ENV: dev (default) or sandbox-public
 	authDisabled  bool
@@ -73,6 +75,7 @@ func loadConfig() (config, error) {
 		databaseURL:   os.Getenv("LEDGERCORE_DATABASE_URL"),
 		natsURL:       os.Getenv("LEDGERCORE_NATS_URL"),
 		adminToken:    os.Getenv("LEDGERCORE_ADMIN_TOKEN"),
+		masterKey:     os.Getenv("LEDGERCORE_MASTER_KEY"),
 		autoMigrate:   os.Getenv("LEDGERCORE_AUTO_MIGRATE") == "true",
 		env:           env,
 		authDisabled:  os.Getenv("LEDGERCORE_AUTH_DISABLED") == "true",
@@ -92,6 +95,9 @@ func hardeningChecks(cfg config) error {
 	}
 	if cfg.authDisabled {
 		return errors.New("refusing to start: LEDGERCORE_AUTH_DISABLED=true is forbidden when LEDGERCORE_ENV=sandbox-public")
+	}
+	if cfg.masterKey == "" {
+		return errors.New("refusing to start: LEDGERCORE_ENV=sandbox-public requires LEDGERCORE_MASTER_KEY (32-byte hex) to encrypt signing keys at rest; generate one, e.g. openssl rand -hex 32")
 	}
 	return nil
 }
@@ -143,7 +149,17 @@ func run() error {
 
 	store := postgres.NewStore(pool)
 
-	signingKey, err := app.EnsureSigningKey(ctx, store)
+	var masterCipher *keycrypt.Cipher
+	if cfg.masterKey != "" {
+		masterCipher, err = keycrypt.New(cfg.masterKey)
+		if err != nil {
+			return err
+		}
+	} else {
+		slog.Warn("LEDGERCORE_MASTER_KEY is not set; signing keys are stored in PLAINTEXT (dev only — forbidden in sandbox-public)")
+	}
+
+	signingKey, err := app.EnsureSigningKey(ctx, store, masterCipher)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,8 @@
 # Required host environment (see docs/runbook-vps.md):
 #   LEDGERCORE_DOMAIN       public FQDN (e.g. sandbox.ledgercore.dev)
 #   LEDGERCORE_ADMIN_TOKEN  strong random token (openssl rand -hex 32)
+#   LEDGERCORE_MASTER_KEY   32-byte hex (openssl rand -hex 32); encrypts the
+#                           JWT signing keys at rest (AES-256-GCM)
 #   LEDGERCORE_ACME_EMAIL   email for Let's Encrypt registration
 #   POSTGRES_PASSWORD       strong random superuser password
 #
@@ -60,6 +62,7 @@ services:
       LEDGERCORE_ENV: "sandbox-public"
       LEDGERCORE_AUTH_DISABLED: "false"
       LEDGERCORE_ADMIN_TOKEN: "${LEDGERCORE_ADMIN_TOKEN:?set a strong admin token (openssl rand -hex 32)}"
+      LEDGERCORE_MASTER_KEY: "${LEDGERCORE_MASTER_KEY:?set the signing-key master key (openssl rand -hex 32)}"
       LEDGERCORE_SANDBOX_SIGNUPS_PER_DAY: "${LEDGERCORE_SANDBOX_SIGNUPS_PER_DAY:-20}"
       LEDGERCORE_SANDBOX_SWEEP_INTERVAL: "${LEDGERCORE_SANDBOX_SWEEP_INTERVAL:-1h}"
     ports: !override []
