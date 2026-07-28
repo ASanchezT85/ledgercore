@@ -29,6 +29,7 @@ const es = {
       "Ledger de doble entrada como servicio: idempotencia, holds, conciliación, webhooks firmados y aislamiento multi-tenant con RLS.",
   },
   nav: {
+    blog: "Blog",
     login: "Iniciar sesión",
     trySandbox: "Probar el sandbox",
     ariaLabel: "Principal",
@@ -150,6 +151,7 @@ const en: typeof es = {
       "Double-entry ledger as a service: idempotency, holds, reconciliation, signed webhooks, and multi-tenant isolation with RLS.",
   },
   nav: {
+    blog: "Blog",
     login: "Sign in",
     trySandbox: "Try the sandbox",
     ariaLabel: "Main",

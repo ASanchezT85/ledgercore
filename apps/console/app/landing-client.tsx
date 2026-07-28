@@ -99,6 +99,12 @@ function LandingContent() {
         <nav className="flex items-center gap-2" aria-label={t.nav.ariaLabel}>
           <LangToggle />
           <Link
+            href="/blog"
+            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
+          >
+            {t.nav.blog}
+          </Link>
+          <Link
             href="/login"
             className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
           >
