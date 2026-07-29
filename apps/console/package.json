@@ -5,7 +5,9 @@
   "description": "LedgerCore Console - web dashboard for finance teams and developers",
   "scripts": {
     "dev": "next dev -p 3000",
+    "prebuild": "node scripts/prepare-docs-assets.mjs",
     "build": "next build",
+    "predev": "node scripts/prepare-docs-assets.mjs",
     "start": "next start -p 3000",
     "lint": "tsc --noEmit"
   },
@@ -17,6 +19,7 @@
     "thinking-orbs": "^0.1.1"
   },
   "devDependencies": {
+    "@scalar/api-reference": "^1.63.0",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^24.3.1",
     "@types/react": "^19.1.13",

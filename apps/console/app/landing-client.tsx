@@ -105,6 +105,12 @@ function LandingContent() {
             {t.nav.blog}
           </Link>
           <Link
+            href="/docs"
+            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
+          >
+            {t.nav.docs}
+          </Link>
+          <Link
             href="/docs/quickstart"
             className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
           >

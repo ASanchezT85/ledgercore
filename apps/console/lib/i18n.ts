@@ -30,6 +30,7 @@ const es = {
   },
   nav: {
     blog: "Blog",
+    docs: "Docs",
     quickstart: "Quickstart",
     login: "Iniciar sesión",
     trySandbox: "Probar el sandbox",
@@ -156,6 +157,7 @@ const en: typeof es = {
   },
   nav: {
     blog: "Blog",
+    docs: "Docs",
     quickstart: "Quickstart",
     login: "Sign in",
     trySandbox: "Try the sandbox",

@@ -8,3 +8,6 @@ nodeLinker: hoisted
 # sharp ships a native binary and needs its postinstall script approved.
 allowBuilds:
   sharp: true
+  # vue-demi (transitive via @scalar/api-reference) has a harmless postinstall
+  # switcher; we don't run Vue 2, so the script is not needed.
+  vue-demi: false
