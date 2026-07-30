@@ -93,25 +93,17 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: services/${{ matrix.svc.name }}/go.sum
 
-      - name: Provision roles and schemas (init SQL)
-        run: psql "postgres://postgres:postgres@localhost:5432/ledgercore" -v ON_ERROR_STOP=1 -f infra/postgres/init/01-init.sql
-
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
-
-      - name: Apply migrations as the migrator
-        run: |
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          goose -dir "${{ matrix.svc.dir }}" postgres \
-            "postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD}@localhost:5432/ledgercore?sslmode=disable&search_path=${{ matrix.svc.schema }}" up
-
-      - name: Apply post-migration grants (maint ownership; un-skips the purge test)
-        run: psql "postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD}@localhost:5432/ledgercore" -v ON_ERROR_STOP=1 -f infra/postgres/migrate/grants.sql
-
-      - name: Integration + RLS tests (connect as migrator; FORCE RLS still applies)
+      # Unified harness convention (R-009): the service's TestMain provisions the
+      # full role model itself via pgx (roles + schema + goose migrate as the
+      # migrator + the grants.sql step) given only a SUPERUSER DSN, then runs the
+      # integration/RLS/purge suite as the service's NOBYPASSRLS runtime role. No
+      # psql, no goose CLI, no init/grants SQL executed in the workflow — this is
+      # byte-for-byte what scripts/ci-local.sh runs, so CI and local are the same
+      # gate. The postgres service starts empty; each matrix leg has its own DB.
+      - name: Integration + RLS + purge tests (harness provisions the real role model)
         working-directory: services/${{ matrix.svc.name }}
         env:
-          LEDGERCORE_TEST_DATABASE_URL: "postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore?search_path=${{ matrix.svc.schema }}"
+          LEDGERCORE_TEST_ADMIN_URL: "postgres://postgres:postgres@localhost:5432/ledgercore"
         run: go test ./internal/adapters/postgres/... -count=1 -v
 
   # Infra role-model gate (LC-014 / LC-002). Provisions the init SQL and proves

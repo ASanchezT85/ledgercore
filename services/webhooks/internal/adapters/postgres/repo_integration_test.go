@@ -31,10 +31,16 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("create pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatalf("migrate: %v", err)
+	// When TestMain provisioned the real role model, migrations already ran as
+	// the migrator and the grants were applied as superuser; `pool` is the
+	// (DDL-less) runtime role, which can neither migrate nor reassign function
+	// ownership. Skip both — they are already done.
+	if !roleModelProvisioned {
+		if err := Migrate(ctx, pool); err != nil {
+			t.Fatalf("migrate: %v", err)
+		}
+		applyMaintGrants(t, pool)
 	}
-	applyMaintGrants(t, pool)
 	// Clean slate for this run. The cross-tenant DELETE runs under the
 	// maintenance identity (no permissive policy exists anymore, R-004).
 	if err := withMaintTx(ctx, pool, func(tx pgx.Tx) error {

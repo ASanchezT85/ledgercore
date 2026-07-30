@@ -12,10 +12,12 @@
 #     scripts/ci-local.sh               # ALSO run the 4-service Postgres gates
 #
 # Requires: go 1.26, node/npx, git. Optional (for the DB gates): a reachable
-# empty Postgres 17 reachable at LEDGERCORE_CI_PG_ADMIN_URL (a superuser DSN)
-# plus goose (auto-installed if absent). The DB gates mirror the CI
-# `pg-integration` matrix: init SQL -> goose migrate -> grants.sql ->
-# per-service integration + RLS + purge tests, each on its own schema/role.
+# empty Postgres 17 at LEDGERCORE_CI_PG_ADMIN_URL (a superuser DSN). NO psql and
+# NO goose CLI are needed — each service's Go TestMain provisions the real role
+# model itself via pgx (roles + schema + goose migrate as migrator + grants), then
+# runs its integration + RLS + purge tests as the NOBYPASSRLS runtime role. This
+# is the exact mechanism the CI `pg-integration` matrix uses (one superuser DSN,
+# `go test` per service), so ci-local and CI are byte-for-byte the same gate.
 set -uo pipefail
 
 ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
@@ -59,35 +61,32 @@ for src in contracts/openapi/*.yaml; do
 done
 
 say "Postgres integration gates (4 services)"
+# Unified harness convention (R-009): every service's TestMain, given a SUPERUSER
+# DSN in LEDGERCORE_TEST_ADMIN_URL, provisions the REAL role model entirely in Go
+# via pgx — it creates the migrator/maint/<svc>_rt roles + the service schema
+# (owner = migrator, the equivalent of infra/postgres/init/01-init.sql), runs the
+# goose migrations AS THE MIGRATOR, applies the infra/postgres/migrate/grants.sql
+# step (SECURITY DEFINER functions reassigned to ledgercore_maint + EXECUTE to the
+# runtime role), and points LEDGERCORE_TEST_DATABASE_URL at the service's RUNTIME
+# role (NOBYPASSRLS) before running the suite. So the gate needs NO psql, NO goose
+# CLI and NO init/grants SQL executed here — just a superuser DSN and `go test`.
+# Every service manages only its own schema + runtime role, so all four can share
+# one database (each DROPs+recreates its own schema idempotently).
 PG_ADMIN="${LEDGERCORE_CI_PG_ADMIN_URL:-}"
 if [ -z "$PG_ADMIN" ]; then
   echo "SKIPPED — set LEDGERCORE_CI_PG_ADMIN_URL to a superuser DSN of an empty" | tee -a "$LOG"
-  echo "Postgres 17 to run these locally. In CI they run as the pg-integration" | tee -a "$LOG"
-  echo "matrix (.github/workflows/ci.yml): init SQL + goose migrate + grants.sql" | tee -a "$LOG"
-  echo "+ per-service integration/RLS/purge tests. NOT counted as green here."    | tee -a "$LOG"
+  echo "Postgres 17 to run these locally, e.g." | tee -a "$LOG"
+  echo "  LEDGERCORE_CI_PG_ADMIN_URL=postgres://postgres:postgres@localhost:5432/ledgercore" | tee -a "$LOG"
+  echo "Each service's TestMain then provisions the full role model (roles +"     | tee -a "$LOG"
+  echo "schema + migrate + grants) and runs its integration/RLS/purge tests as"   | tee -a "$LOG"
+  echo "the NOBYPASSRLS runtime role. In CI the pg-integration matrix does the"    | tee -a "$LOG"
+  echo "same. NOT counted as green here."                                          | tee -a "$LOG"
 else
-  # Dev role passwords consumed by init/01-init.sql via psql \getenv (R-003).
-  export LEDGERCORE_MIGRATOR_PASSWORD="${LEDGERCORE_MIGRATOR_PASSWORD:-ledgercore_migrator_dev}"
-  export LEDGERCORE_LEDGER_RT_PASSWORD="${LEDGERCORE_LEDGER_RT_PASSWORD:-ledgercore_ledger_rt_dev}"
-  export LEDGERCORE_IDENTITY_RT_PASSWORD="${LEDGERCORE_IDENTITY_RT_PASSWORD:-ledgercore_identity_rt_dev}"
-  export LEDGERCORE_RECON_RT_PASSWORD="${LEDGERCORE_RECON_RT_PASSWORD:-ledgercore_recon_rt_dev}"
-  export LEDGERCORE_WEBHOOKS_RT_PASSWORD="${LEDGERCORE_WEBHOOKS_RT_PASSWORD:-ledgercore_webhooks_rt_dev}"
-  MIG_BASE="postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD}@$(echo "$PG_ADMIN" | sed 's#^[a-z]*://[^@]*@##')"
-
-  command -v goose >/dev/null 2>&1 || run go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
-  export PATH="$PATH:$(go env GOPATH)/bin"
-
-  say "provision roles + schemas (init SQL)"
-  run psql "$PG_ADMIN" -v ON_ERROR_STOP=1 -f infra/postgres/init/01-init.sql || fail=1
-
   for pair in "ledger-core:ledger" "identity:identity" "reconciliation:recon" "webhooks:webhooks"; do
     svc="${pair%%:*}"; schema="${pair##*:}"
-    say "migrate + grants + integration — $svc ($schema)"
-    run goose -dir "services/$svc/internal/adapters/postgres/migrations" postgres \
-      "${MIG_BASE}?sslmode=disable&search_path=${schema}" up || fail=1
-    run psql "$MIG_BASE" -v ON_ERROR_STOP=1 -f infra/postgres/migrate/grants.sql || fail=1
+    say "provision + migrate + grants + integration/RLS/purge — $svc ($schema)"
     ( cd "services/$svc" && \
-      LEDGERCORE_TEST_DATABASE_URL="${MIG_BASE}?search_path=${schema}" \
+      LEDGERCORE_TEST_ADMIN_URL="$PG_ADMIN" \
       go test ./internal/adapters/postgres/... -count=1 ) 2>&1 | tee -a "$LOG"
     [ "${PIPESTATUS[0]}" -eq 0 ] || fail=1
   done

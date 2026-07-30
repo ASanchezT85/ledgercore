@@ -38,8 +38,10 @@ func TestPostgresIntegration(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if err := Migrate(ctx, url); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if !roleModelProvisioned {
+		if err := Migrate(ctx, url); err != nil {
+			t.Fatalf("migrate: %v", err)
+		}
 	}
 
 	pool, err := pgxutil.NewPool(ctx, url, "recon")

@@ -42,8 +42,10 @@ func TestAPIKeyRLSCrossTenantIsolation(t *testing.T) {
 	}
 	defer pool.Close()
 
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if !roleModelProvisioned {
+		if err := Migrate(ctx, pool); err != nil {
+			t.Fatalf("migrate: %v", err)
+		}
 	}
 
 	var bypass bool
