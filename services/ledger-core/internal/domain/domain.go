@@ -327,6 +327,23 @@ type TrialBalance struct {
 	Totals   []TrialBalanceTotal
 }
 
+// BalanceDiscrepancy is one (account, asset) where the derived
+// account_balances row disagrees with the totals recomputed from postings.
+// An empty slice of these means account_balances is consistent with its
+// source of truth.
+type BalanceDiscrepancy struct {
+	AccountID              uuid.UUID
+	Asset                  string
+	ComputedPostedDebits   int64
+	StoredPostedDebits     int64
+	ComputedPostedCredits  int64
+	StoredPostedCredits    int64
+	ComputedPendingDebits  int64
+	StoredPendingDebits    int64
+	ComputedPendingCredits int64
+	StoredPendingCredits   int64
+}
+
 // ---- Asset registry ----------------------------------------------------------
 
 // DefaultAssetExponent is used for assets not present in the registry.

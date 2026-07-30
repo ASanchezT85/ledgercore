@@ -24,6 +24,7 @@ import (
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/config"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/dispatcher"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/keycrypt"
 )
 
 const serviceName = "webhooks"
@@ -64,8 +65,26 @@ func run() error {
 		slog.Info("migrations applied", "schema", postgres.SchemaName)
 	}
 
-	repo := postgres.NewRepo(pool)
+	// Envelope encryption for webhook signing secrets at rest (LC-008).
+	var masterCipher *keycrypt.Cipher
+	if cfg.MasterKey != "" {
+		masterCipher, err = keycrypt.New(cfg.MasterKey)
+		if err != nil {
+			return err
+		}
+	} else {
+		slog.Warn("LEDGERCORE_MASTER_KEY is not set; webhook signing secrets are stored in PLAINTEXT (dev only — forbidden in sandbox-public)")
+	}
+
+	repo := postgres.NewRepo(pool, masterCipher)
 	svc := app.NewService(repo, repo)
+
+	// Re-encrypt any legacy plaintext secrets now that a master key exists.
+	if n, err := repo.ReencryptPlaintextSecrets(ctx); err != nil {
+		return fmt.Errorf("reencrypt webhook secrets at rest: %w", err)
+	} else if n > 0 {
+		slog.Info("re-encrypted legacy plaintext webhook secrets", "count", n)
+	}
 
 	consumer := natsconsumer.New(cfg.NATSURL, svc)
 	consumer.Start(ctx)

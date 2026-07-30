@@ -22,23 +22,39 @@ type Server struct {
 }
 
 // NewHandler wires routes and middlewares and returns the root handler.
+//
+// Auth (LC-013): every /v1 route is behind ident.RequireAuthConfig, which
+// validates the EdDSA signature plus iss, aud (this service's audience) and a
+// bounded clock skew. Authorization (LC-012): each route additionally
+// requires a scope — read scope for GETs, write scope for state changes — so
+// a token without the right scope is rejected with 403 (deny by default).
 func NewHandler(svc *app.Service, pool *pgxpool.Pool, jwksURL string, authDisabled bool) http.Handler {
 	s := &Server{svc: svc, pool: pool}
 
+	read := ident.RequireScope(ident.ScopeReconRead)
+	write := ident.RequireScope(ident.ScopeReconWrite)
+
 	api := http.NewServeMux()
-	api.HandleFunc("POST /v1/reconciliation/sources", s.createSource)
-	api.HandleFunc("GET /v1/reconciliation/sources", s.listSources)
-	api.HandleFunc("POST /v1/reconciliation/imports", s.createImport)
-	api.HandleFunc("POST /v1/reconciliation/runs", s.createRun)
-	api.HandleFunc("GET /v1/reconciliation/runs/{id}", s.getRun)
-	api.HandleFunc("GET /v1/reconciliation/reports", s.getReports)
-	api.HandleFunc("GET /v1/reconciliation/discrepancies", s.listDiscrepancies)
-	api.HandleFunc("PATCH /v1/reconciliation/discrepancies/{id}", s.patchDiscrepancy)
+	api.Handle("POST /v1/reconciliation/sources", write(http.HandlerFunc(s.createSource)))
+	api.Handle("GET /v1/reconciliation/sources", read(http.HandlerFunc(s.listSources)))
+	api.Handle("POST /v1/reconciliation/imports", write(http.HandlerFunc(s.createImport)))
+	api.Handle("POST /v1/reconciliation/runs", write(http.HandlerFunc(s.createRun)))
+	api.Handle("GET /v1/reconciliation/runs/{id}", read(http.HandlerFunc(s.getRun)))
+	api.Handle("GET /v1/reconciliation/reports", read(http.HandlerFunc(s.getReports)))
+	api.Handle("GET /v1/reconciliation/discrepancies", read(http.HandlerFunc(s.listDiscrepancies)))
+	api.Handle("PATCH /v1/reconciliation/discrepancies/{id}", write(http.HandlerFunc(s.patchDiscrepancy)))
+
+	auth := ident.RequireAuthConfig(ident.AuthConfig{
+		JWKSURL:          jwksURL,
+		AuthDisabled:     authDisabled,
+		ExpectedIssuer:   ident.DefaultIssuer,
+		ExpectedAudience: ident.AudienceReconciliation,
+	})
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", s.healthz)
 	root.HandleFunc("GET /readyz", s.readyz)
-	root.Handle("/v1/", ident.RequireAuth(jwksURL, authDisabled)(api))
+	root.Handle("/v1/", auth(api))
 
 	return httpx.RequestID(httpx.Recover(httpx.Logger(httpx.CORSDev(root))))
 }

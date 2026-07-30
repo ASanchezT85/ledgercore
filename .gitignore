@@ -46,9 +46,23 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# --- PHP ---
+vendor/
+composer.phar
+*.phpunit.result.cache
+# ...but keep the console's self-hosted Scalar bundle (committed on purpose).
+!apps/console/public/vendor/
+!apps/console/public/vendor/**
+
+# --- Audit export (scripts/export-clean.sh output) ---
+dist-export/
+
 # --- Misc ---
 *.log
 tmp/
 .cache/
+*.dump
+*.sql.gz
+backups/
 .claude/skills/gstack/
 apps/console/.env.local

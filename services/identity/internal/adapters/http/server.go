@@ -22,7 +22,7 @@ type IdentityService interface {
 	CreateTenant(ctx context.Context, name, slug string) (domain.Tenant, error)
 	GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, error)
 	ListTenants(ctx context.Context, limit int, cursor httpx.Cursor) ([]domain.Tenant, error)
-	CreateAPIKey(ctx context.Context, tenantID uuid.UUID, environment, name string) (domain.APIKey, string, error)
+	CreateAPIKey(ctx context.Context, tenantID uuid.UUID, environment, name string, scopes []string) (domain.APIKey, string, error)
 	RevokeAPIKey(ctx context.Context, id uuid.UUID) error
 	IssueToken(ctx context.Context, secret string) (app.IssuedToken, error)
 	JWKS(ctx context.Context) (app.JWKSDocument, error)

@@ -137,7 +137,7 @@ func TestTokenIssuanceWithEncryptedKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, secret, err := svc.CreateAPIKey(context.Background(), tenant.ID, domain.EnvironmentSandbox, "ci")
+	_, secret, err := svc.CreateAPIKey(context.Background(), tenant.ID, domain.EnvironmentSandbox, "ci", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

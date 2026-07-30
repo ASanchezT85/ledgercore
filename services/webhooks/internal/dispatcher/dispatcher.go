@@ -48,11 +48,12 @@ type Dispatcher struct {
 	lease     time.Duration
 }
 
-// New builds a dispatcher with the default HTTP client (10s timeout).
+// New builds a dispatcher with the hardened HTTP client (SSRF guard, capped
+// redirects, 10s timeout).
 func New(store Store) *Dispatcher {
 	return &Dispatcher{
 		store:     store,
-		client:    &http.Client{Timeout: DefaultTimeout},
+		client:    newSafeClient(DefaultTimeout),
 		interval:  DefaultInterval,
 		batchSize: DefaultBatchSize,
 		lease:     DefaultLease,

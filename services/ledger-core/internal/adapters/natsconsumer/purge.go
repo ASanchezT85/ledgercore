@@ -2,10 +2,13 @@
 // contains only the sandbox purge consumer: on identity.tenant.expired it
 // deletes every row the expired tenant owns in the ledger schema.
 //
-// This is the ONLY application code path allowed to use the
-// ledger.allow_maintenance hatch (blueprint §14, Fase 1a): the deletes run in
-// one tenant-scoped transaction with SET LOCAL, in strict child-first order,
-// and are idempotent (a redelivery finds nothing to delete and acks).
+// LC-004: the purge no longer opens the append-only maintenance hatch with the
+// runtime role. It calls the SECURITY DEFINER function
+// ledger.purge_expired_sandbox_tenant, owned by the restricted ledgercore_maint
+// role (see migration 0005). That function is the only sanctioned path allowed
+// to bypass the append-only guards; the runtime role cannot bypass them on its
+// own. The call still runs inside one tenant-scoped transaction (RLS via
+// SET LOCAL app.tenant_id) and is idempotent (a redelivery deletes nothing).
 package natsconsumer
 
 import (
@@ -29,69 +32,34 @@ const PurgeDurable = "ledger-purge"
 
 const purgeTimeout = 60 * time.Second
 
-// purgeStatements deletes tenant data child-first so no FK is ever violated.
-// Every statement is scoped by tenant_id; RLS (tenant tx) enforces the same
-// scope a second time.
-var purgeStatements = []struct {
-	table string
-	sql   string
-}{
-	{"postings", `DELETE FROM postings WHERE tenant_id = $1`},
-	{"idempotency_keys", `DELETE FROM idempotency_keys WHERE tenant_id = $1`},
-	{"holds", `DELETE FROM holds WHERE tenant_id = $1`},
-	{"account_balances", `DELETE FROM account_balances WHERE tenant_id = $1`},
-	{"transactions", `DELETE FROM transactions WHERE tenant_id = $1`},
-	{"accounts", `DELETE FROM accounts WHERE tenant_id = $1`},
-	{"ledgers", `DELETE FROM ledgers WHERE tenant_id = $1`},
-	{"outbox", `DELETE FROM outbox WHERE tenant_id = $1`},
-}
-
 // StartPurgeConsumer subscribes durably to identity.tenant.expired on the
 // LEDGERCORE stream and purges the ledger schema for each expired tenant.
 func StartPurgeConsumer(ctx context.Context, nc *nats.Conn, pool *pgxpool.Pool) (*nats.Subscription, error) {
 	return events.SubscribeTenantExpired(ctx, nc, PurgeDurable, purgeTimeout,
 		func(ctx context.Context, tenantID uuid.UUID) error {
-			counts, err := PurgeTenant(ctx, pool, tenantID)
+			deleted, err := PurgeTenant(ctx, pool, tenantID)
 			if err != nil {
 				return err
 			}
-			logPurge("ledger", tenantID, counts)
+			slog.Info(fmt.Sprintf("tenant purge complete: %d rows deleted", deleted),
+				"schema", "ledger", "tenant_id", tenantID, "rows_deleted", deleted)
 			return nil
 		})
 }
 
-func logPurge(schema string, tenantID uuid.UUID, counts map[string]int64) {
-	total := int64(0)
-	args := make([]any, 0, 2*len(counts)+4)
-	args = append(args, "schema", schema, "tenant_id", tenantID)
-	for _, st := range purgeStatements {
-		args = append(args, st.table, counts[st.table])
-		total += counts[st.table]
-	}
-	slog.Info(fmt.Sprintf("tenant purge complete: %d rows deleted", total), args...)
-}
-
-// PurgeTenant deletes every ledger-schema row of one tenant in a single
-// tenant-scoped transaction with the maintenance hatch enabled. It returns
-// deleted row counts per table and is idempotent. Exported for tests.
-func PurgeTenant(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID) (map[string]int64, error) {
-	counts := make(map[string]int64, len(purgeStatements))
+// PurgeTenant deletes every ledger-schema row of one tenant by invoking the
+// sanctioned SECURITY DEFINER function ledger.purge_expired_sandbox_tenant
+// (owned by ledgercore_maint) inside a single tenant-scoped transaction. The
+// function refuses tenants that own live ledgers and is the only path allowed
+// to bypass the append-only guards. It returns the number of rows deleted and
+// is idempotent. Exported for tests.
+func PurgeTenant(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID) (int64, error) {
+	var deleted int64
 	err := pgxutil.WithTenantTx(ctx, pool, tenantID, func(tx pgx.Tx) error {
-		// SET LOCAL: the hatch dies with this transaction.
-		if _, err := tx.Exec(ctx, `SET LOCAL ledger.allow_maintenance = '1'`); err != nil {
-			return fmt.Errorf("enable maintenance hatch: %w", err)
-		}
-		for _, st := range purgeStatements {
-			tag, err := tx.Exec(ctx, st.sql, tenantID)
-			if err != nil {
-				return fmt.Errorf("purge %s: %w", st.table, err)
-			}
-			counts[st.table] = tag.RowsAffected()
-		}
-		return nil
+		return tx.QueryRow(ctx, `SELECT purge_expired_sandbox_tenant($1)`, tenantID).Scan(&deleted)
 	})
 	if err != nil {
-		return nil, err
+		return 0, fmt.Errorf("purge tenant %s: %w", tenantID, err)
 	}
-	return counts, nil
+	return deleted, nil
 }

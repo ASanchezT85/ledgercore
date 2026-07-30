@@ -118,6 +118,8 @@ func TestRequireAuthValidatesEdDSAAgainstJWKS(t *testing.T) {
 	makeToken := func(mutate func(c jwt.MapClaims)) string {
 		claims := jwt.MapClaims{
 			"sub":       "api-key-123",
+			"iss":       DefaultIssuer,
+			"aud":       DefaultAudiences(),
 			"tenant_id": tenant.String(),
 			"env":       EnvSandbox,
 			"scopes":    []string{"ledger:read", "ledger:write"},
@@ -180,7 +182,7 @@ func TestRequireAuthValidatesEdDSAAgainstJWKS(t *testing.T) {
 			t.Fatal(err)
 		}
 		claims := jwt.MapClaims{
-			"sub": "x", "tenant_id": tenant.String(), "env": EnvSandbox,
+			"sub": "x", "iss": DefaultIssuer, "tenant_id": tenant.String(), "env": EnvSandbox,
 			"exp": time.Now().Add(time.Hour).Unix(),
 		}
 		tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
@@ -196,6 +198,118 @@ func TestRequireAuthValidatesEdDSAAgainstJWKS(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+signed)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+	})
+
+	// LC-013: issuer, subject and clock-skew hardening on the default
+	// middleware (RequireAuth enforces DefaultIssuer).
+	reject := func(t *testing.T, mutate func(jwt.MapClaims)) {
+		t.Helper()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Fatal("handler should not run")
+		}))
+		req := httptest.NewRequest(http.MethodGet, "/v1/accounts", nil)
+		req.Header.Set("Authorization", "Bearer "+makeToken(mutate))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+	}
+
+	t.Run("wrong issuer rejected", func(t *testing.T) {
+		reject(t, func(c jwt.MapClaims) { c["iss"] = "someone-else" })
+	})
+	t.Run("missing issuer rejected", func(t *testing.T) {
+		reject(t, func(c jwt.MapClaims) { delete(c, "iss") })
+	})
+	t.Run("empty subject rejected", func(t *testing.T) {
+		reject(t, func(c jwt.MapClaims) { c["sub"] = "" })
+	})
+	t.Run("missing subject rejected", func(t *testing.T) {
+		reject(t, func(c jwt.MapClaims) { delete(c, "sub") })
+	})
+	t.Run("clock skew beyond leeway rejected", func(t *testing.T) {
+		// Expired well past the 60s default leeway.
+		reject(t, func(c jwt.MapClaims) { c["exp"] = time.Now().Add(-5 * time.Minute).Unix() })
+	})
+
+	// LC-013: audience enforcement via RequireAuthConfig.
+	t.Run("audience enforcement", func(t *testing.T) {
+		mwAud := RequireAuthConfig(AuthConfig{
+			JWKSURL:          jwksSrv.URL,
+			ExpectedIssuer:   DefaultIssuer,
+			ExpectedAudience: AudienceReconciliation,
+		})
+		pass := mwAud(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+
+		// Token carrying the reconciliation audience passes.
+		req := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+		req.Header.Set("Authorization", "Bearer "+makeToken(nil))
+		rec := httptest.NewRecorder()
+		pass.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for matching audience, got %d", rec.Code)
+		}
+
+		// Token minted for a different audience set is rejected.
+		req = httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+		req.Header.Set("Authorization", "Bearer "+makeToken(func(c jwt.MapClaims) {
+			c["aud"] = []string{"some-other-service"}
+		}))
+		rec = httptest.NewRecorder()
+		pass.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 for wrong audience, got %d", rec.Code)
+		}
+	})
+}
+
+// TestRequireScope covers the deny-by-default authorization guard (LC-012).
+func TestRequireScope(t *testing.T) {
+	newReq := func(scopes []string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+		ctx := ContextWithClaims(req.Context(), Claims{
+			Subject: "api_key:1", TenantID: uuid.New(), Environment: EnvSandbox, Scopes: scopes,
+		})
+		return req.WithContext(ctx)
+	}
+	guarded := func(scope string) http.Handler {
+		return RequireScope(scope)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+	}
+
+	t.Run("token with the scope passes", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		guarded(ScopeReconWrite).ServeHTTP(rec, newReq([]string{ScopeReconRead, ScopeReconWrite}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("token without the scope is forbidden", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		guarded(ScopeReconWrite).ServeHTTP(rec, newReq([]string{ScopeReconRead}))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("wildcard satisfies any scope", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		guarded(ScopeReconWrite).ServeHTTP(rec, newReq([]string{ScopeWildcard}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("no claims in context is unauthorized", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/v1/x", nil)
+		guarded(ScopeReconWrite).ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want 401", rec.Code)
 		}

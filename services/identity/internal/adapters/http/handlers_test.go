@@ -35,7 +35,7 @@ func (s *stubService) GetTenant(context.Context, uuid.UUID) (domain.Tenant, erro
 func (s *stubService) ListTenants(context.Context, int, httpx.Cursor) ([]domain.Tenant, error) {
 	return []domain.Tenant{s.tenant}, s.err
 }
-func (s *stubService) CreateAPIKey(context.Context, uuid.UUID, string, string) (domain.APIKey, string, error) {
+func (s *stubService) CreateAPIKey(context.Context, uuid.UUID, string, string, []string) (domain.APIKey, string, error) {
 	return domain.APIKey{}, "lk_sandbox_secret", s.err
 }
 func (s *stubService) RevokeAPIKey(context.Context, uuid.UUID) error { return s.err }

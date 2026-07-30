@@ -379,6 +379,17 @@ func (s *Service) TrialBalance(ctx context.Context, tenantID, ledgerID uuid.UUID
 	return s.store.TrialBalance(ctx, tenantID, ledgerID, asOf)
 }
 
+// VerifyBalances recomputes the per-account/asset balances of a ledger from
+// its postings and returns the discrepancies against the derived
+// account_balances table. An empty result means the derived balances are
+// consistent with the postings that back them.
+func (s *Service) VerifyBalances(ctx context.Context, tenantID, ledgerID uuid.UUID) ([]domain.BalanceDiscrepancy, error) {
+	if ledgerID == uuid.Nil {
+		return nil, fmt.Errorf("%w: ledger_id is required", ErrValidation)
+	}
+	return s.store.VerifyBalances(ctx, tenantID, ledgerID)
+}
+
 // StatementDefaultPeriod is the lookback window applied when the client does
 // not provide from/to.
 const StatementDefaultPeriod = 30 * 24 * time.Hour

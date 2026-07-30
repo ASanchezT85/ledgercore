@@ -17,4 +17,7 @@ var (
 	ErrInsufficientFunds = errors.New("app: insufficient funds")
 	// ErrValidation: the request payload is semantically invalid.
 	ErrValidation = errors.New("app: validation failed")
+	// ErrIdempotencyConflict: an idempotency key was reused with a different
+	// request payload (fingerprint mismatch). Maps to 409 idempotency_conflict.
+	ErrIdempotencyConflict = errors.New("app: idempotency conflict")
 )

@@ -31,8 +31,11 @@ type APIKey struct {
 	Name        string
 	KeyPrefix   string
 	SecretHash  []byte
-	CreatedAt   time.Time
-	RevokedAt   *time.Time
+	// Scopes bounds what tokens minted from this key may do. Empty means the
+	// key predates scoped issuance; the service falls back to DefaultScopes.
+	Scopes    []string
+	CreatedAt time.Time
+	RevokedAt *time.Time
 }
 
 // Revoked reports whether the key has been revoked.

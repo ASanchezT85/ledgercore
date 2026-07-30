@@ -199,7 +199,7 @@ func TestCreateAPIKeyStoresOnlyHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci")
+	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,11 +214,11 @@ func TestCreateAPIKeyStoresOnlyHash(t *testing.T) {
 		t.Error("stored hash does not verify the returned secret")
 	}
 
-	if _, _, err := svc.CreateAPIKey(ctx, uuid.New(), domain.EnvironmentSandbox, "ci"); !errors.Is(err, domain.ErrNotFound) {
+	if _, _, err := svc.CreateAPIKey(ctx, uuid.New(), domain.EnvironmentSandbox, "ci", nil); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown tenant: got %v, want ErrNotFound", err)
 	}
 	var verr ValidationError
-	if _, _, err := svc.CreateAPIKey(ctx, tenant.ID, "prod", "ci"); !errors.As(err, &verr) {
+	if _, _, err := svc.CreateAPIKey(ctx, tenant.ID, "prod", "ci", nil); !errors.As(err, &verr) {
 		t.Errorf("bad environment: got %v, want ValidationError", err)
 	}
 }
@@ -235,7 +235,7 @@ func TestIssueTokenRoundTripAgainstOwnJWKS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentLive, "prod-key")
+	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentLive, "prod-key", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestIssueTokenRejectsRevokedKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci")
+	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestIssueTokenRejectsSuspendedTenantAndGarbage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci")
+	_, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,6 +354,62 @@ func TestIssueTokenRejectsSuspendedTenantAndGarbage(t *testing.T) {
 		if _, err := svc.IssueToken(ctx, bad); !errors.Is(err, ErrInvalidCredentials) {
 			t.Errorf("IssueToken(%q): got %v, want ErrInvalidCredentials", bad, err)
 		}
+	}
+}
+
+// TestCreateAPIKeyScopes covers LC-012 issuance: keys can be minted with a
+// bounded scope set, unknown scopes are rejected, and issued tokens carry the
+// key's scopes (not the broad default).
+func TestCreateAPIKeyScopes(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+
+	tenant, err := svc.CreateTenant(ctx, "Acme", "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unknown scope is rejected.
+	var verr ValidationError
+	if _, _, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci", []string{"ledger:admin"}); !errors.As(err, &verr) {
+		t.Fatalf("unknown scope: got %v, want ValidationError", err)
+	}
+
+	// Narrow scope set is honored.
+	narrow := []string{ident.ScopeReconRead}
+	key, secret, err := svc.CreateAPIKey(ctx, tenant.ID, domain.EnvironmentSandbox, "ci", narrow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(key.Scopes) != 1 || key.Scopes[0] != ident.ScopeReconRead {
+		t.Fatalf("key scopes = %v, want [reconciliation:read]", key.Scopes)
+	}
+
+	// The issued token must carry exactly the key's scopes.
+	jwksSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		doc, _ := svc.JWKS(r.Context())
+		httpx.WriteJSON(w, http.StatusOK, doc)
+	}))
+	defer jwksSrv.Close()
+
+	token, err := svc.IssueToken(ctx, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got ident.Claims
+	protected := ident.RequireAuth(jwksSrv.URL, false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ = ident.ClaimsFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	rec := httptest.NewRecorder()
+	protected.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("middleware rejected token: %d %s", rec.Code, rec.Body.String())
+	}
+	if !got.HasScope(ident.ScopeReconRead) || got.HasScope(ident.ScopeReconWrite) || got.HasScope(ident.ScopeLedgerWrite) {
+		t.Fatalf("token scopes = %v, want only reconciliation:read", got.Scopes)
 	}
 }
 

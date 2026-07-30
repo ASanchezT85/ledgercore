@@ -15,6 +15,7 @@ type Config struct {
 	AuthDisabled bool
 	AutoMigrate  bool
 	Env          string // LEDGERCORE_ENV: dev (default) or sandbox-public
+	MasterKey    string // LEDGERCORE_MASTER_KEY: 32-byte hex; encrypts signing secrets at rest
 }
 
 // Load reads the environment. It returns an error when a required variable
@@ -28,6 +29,7 @@ func Load() (Config, error) {
 		AuthDisabled: os.Getenv("LEDGERCORE_AUTH_DISABLED") == "true",
 		AutoMigrate:  os.Getenv("LEDGERCORE_AUTO_MIGRATE") == "true",
 		Env:          getenv("LEDGERCORE_ENV", "dev"),
+		MasterKey:    os.Getenv("LEDGERCORE_MASTER_KEY"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("config: LEDGERCORE_DATABASE_URL is required")
@@ -35,6 +37,10 @@ func Load() (Config, error) {
 	// Fail closed on public sandbox deployments.
 	if cfg.Env == "sandbox-public" && cfg.AuthDisabled {
 		return Config{}, errors.New("config: refusing to start: LEDGERCORE_AUTH_DISABLED=true is forbidden when LEDGERCORE_ENV=sandbox-public")
+	}
+	// Webhook signing secrets must be encrypted at rest in public sandbox.
+	if cfg.Env == "sandbox-public" && cfg.MasterKey == "" {
+		return Config{}, errors.New("config: refusing to start: LEDGERCORE_ENV=sandbox-public requires LEDGERCORE_MASTER_KEY (32-byte hex) to encrypt webhook secrets at rest; generate one, e.g. openssl rand -hex 32")
 	}
 	if !cfg.AuthDisabled && cfg.JWKSURL == "" {
 		return Config{}, errors.New("config: LEDGERCORE_JWKS_URL is required unless LEDGERCORE_AUTH_DISABLED=true")

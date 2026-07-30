@@ -216,11 +216,15 @@ func (t *txStore) InsertExternalTransactions(ctx context.Context, txs []domain.E
 		if err != nil {
 			return fmt.Errorf("postgres: marshal raw row: %w", err)
 		}
+		var direction any
+		if x.Direction != "" {
+			direction = x.Direction
+		}
 		batch.Queue(`
 			INSERT INTO external_transactions
-				(id, tenant_id, import_id, source_id, external_ref, amount, asset, occurred_at, raw, match_status, matched_entry_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)`,
-			x.ID, x.TenantID, x.ImportID, x.SourceID, x.ExternalRef, x.Amount, x.Asset, x.OccurredAt, raw, string(x.MatchStatus), x.MatchedEntryID)
+				(id, tenant_id, import_id, source_id, external_ref, amount, asset, direction, occurred_at, raw, match_status, matched_entry_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)`,
+			x.ID, x.TenantID, x.ImportID, x.SourceID, x.ExternalRef, x.Amount, x.Asset, direction, x.OccurredAt, raw, string(x.MatchStatus), x.MatchedEntryID)
 	}
 	results := t.tx.SendBatch(ctx, batch)
 	defer results.Close()
@@ -234,7 +238,7 @@ func (t *txStore) InsertExternalTransactions(ctx context.Context, txs []domain.E
 
 func (t *txStore) ListUnmatchedExternals(ctx context.Context, sourceID uuid.UUID) ([]domain.ExternalTransaction, error) {
 	rows, err := t.tx.Query(ctx, `
-		SELECT id, tenant_id, import_id, source_id, external_ref, amount, asset, occurred_at, match_status, matched_entry_id
+		SELECT id, tenant_id, import_id, source_id, external_ref, amount, asset, direction, occurred_at, match_status, matched_entry_id
 		FROM external_transactions
 		WHERE source_id = $1 AND match_status = 'unmatched'
 		ORDER BY occurred_at, id`, sourceID)
@@ -247,9 +251,13 @@ func (t *txStore) ListUnmatchedExternals(ctx context.Context, sourceID uuid.UUID
 	for rows.Next() {
 		var x domain.ExternalTransaction
 		var status string
+		var direction *string
 		if err := rows.Scan(&x.ID, &x.TenantID, &x.ImportID, &x.SourceID, &x.ExternalRef,
-			&x.Amount, &x.Asset, &x.OccurredAt, &status, &x.MatchedEntryID); err != nil {
+			&x.Amount, &x.Asset, &direction, &x.OccurredAt, &status, &x.MatchedEntryID); err != nil {
 			return nil, fmt.Errorf("postgres: scan external transaction: %w", err)
+		}
+		if direction != nil {
+			x.Direction = *direction
 		}
 		x.MatchStatus = domain.MatchStatus(status)
 		out = append(out, x)
