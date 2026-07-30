@@ -12,6 +12,14 @@
 #                           JWT signing keys at rest (AES-256-GCM)
 #   LEDGERCORE_ACME_EMAIL   email for Let's Encrypt registration
 #   POSTGRES_PASSWORD       strong random superuser password
+#   Per-role DB passwords (R-003) — generate one random value PER ROLE
+#   (openssl rand -hex 24) so a repo-known "*_dev" value can never reach a
+#   public host. Fail-closed: compose refuses to render if any is unset.
+#     LEDGERCORE_MIGRATOR_PASSWORD
+#     LEDGERCORE_LEDGER_RT_PASSWORD
+#     LEDGERCORE_IDENTITY_RT_PASSWORD
+#     LEDGERCORE_RECON_RT_PASSWORD
+#     LEDGERCORE_WEBHOOKS_RT_PASSWORD
 #
 # Hardening baked in (services refuse to start otherwise):
 #   - LEDGERCORE_ENV=sandbox-public in every Go service
@@ -25,6 +33,15 @@ services:
   postgres:
     environment:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set a strong postgres password}"
+      # R-003: per-role passwords are REQUIRED on a public host. The base file
+      # defaults these to "*_dev"; overriding them here with ${VAR:?} means the
+      # stack fail-closes (compose config/up abort) unless the operator supplies
+      # a random value per role — so NO repo-known password is ever created.
+      LEDGERCORE_MIGRATOR_PASSWORD: "${LEDGERCORE_MIGRATOR_PASSWORD:?set a random migrator password (openssl rand -hex 24)}"
+      LEDGERCORE_LEDGER_RT_PASSWORD: "${LEDGERCORE_LEDGER_RT_PASSWORD:?set a random ledger runtime password}"
+      LEDGERCORE_IDENTITY_RT_PASSWORD: "${LEDGERCORE_IDENTITY_RT_PASSWORD:?set a random identity runtime password}"
+      LEDGERCORE_RECON_RT_PASSWORD: "${LEDGERCORE_RECON_RT_PASSWORD:?set a random recon runtime password}"
+      LEDGERCORE_WEBHOOKS_RT_PASSWORD: "${LEDGERCORE_WEBHOOKS_RT_PASSWORD:?set a random webhooks runtime password}"
     ports: !override []
 
   nats:
@@ -77,6 +94,10 @@ services:
     environment:
       LEDGERCORE_ENV: "sandbox-public"
       LEDGERCORE_AUTH_DISABLED: "false"
+      # R-002: webhooks refuses to start in sandbox-public without a master key
+      # (it encrypts subscription secrets at rest). REQUIRED here, same as
+      # identity, so the base dev default can never reach a public host.
+      LEDGERCORE_MASTER_KEY: "${LEDGERCORE_MASTER_KEY:?set the signing-key master key (openssl rand -hex 32)}"
     ports: !override []
 
   console:

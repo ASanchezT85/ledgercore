@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ledgercore/ledgercore/libs/go/money"
 	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
@@ -144,6 +145,99 @@ func TestIdempotencyFingerprintConflict(t *testing.T) {
 	}
 }
 
+// ---- R-008: effective_at / expires_at are part of the fingerprint ----------
+
+func TestIdempotencyFingerprintSemanticFields(t *testing.T) {
+	s := mustStore(t)
+	f := newFixture(t, s)
+	ctx := context.Background()
+
+	t1 := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	t2 := time.Date(2026, 6, 7, 8, 9, 10, 0, time.UTC)
+
+	// txWith builds an otherwise-identical posted transaction with a specific,
+	// client-PROVIDED effective_at.
+	txWith := func(key string, effAt time.Time) domain.Transaction {
+		tx := postedTx(f, key, 10000)
+		tx.EffectiveAt = effAt
+		tx.EffectiveAtProvided = true
+		return tx
+	}
+
+	// (a) same key + same explicit effective_at -> replay.
+	key := "idem-eff-" + uuid.NewString()
+	if _, replayed, err := s.CreateTransaction(ctx, txWith(key, t1)); err != nil || replayed {
+		t.Fatalf("first create with explicit effective_at: replayed=%v err=%v", replayed, err)
+	}
+	if _, replayed, err := s.CreateTransaction(ctx, txWith(key, t1)); err != nil || !replayed {
+		t.Fatalf("same explicit effective_at must replay: replayed=%v err=%v", replayed, err)
+	}
+	// (b) same key + DIFFERENT explicit effective_at -> 409.
+	if _, _, err := s.CreateTransaction(ctx, txWith(key, t2)); !errors.Is(err, app.ErrIdempotencyConflict) {
+		t.Fatalf("different effective_at reuse: err=%v, want ErrIdempotencyConflict", err)
+	}
+	// (c) same key, one OMITTED vs one PROVIDED -> 409 (distinguishes absent/value).
+	keyO := "idem-eff-omit-" + uuid.NewString()
+	if _, _, err := s.CreateTransaction(ctx, postedTx(f, keyO, 10000)); err != nil { // omitted
+		t.Fatalf("create with omitted effective_at: %v", err)
+	}
+	if _, _, err := s.CreateTransaction(ctx, txWith(keyO, t1)); !errors.Is(err, app.ErrIdempotencyConflict) {
+		t.Fatalf("omitted-then-provided effective_at: err=%v, want ErrIdempotencyConflict", err)
+	}
+
+	// Holds: expires_at is part of the fingerprint too.
+	if _, _, err := s.CreateTransaction(ctx, postedTx(f, "fund-"+uuid.NewString(), 10000)); err != nil {
+		t.Fatalf("fund: %v", err)
+	}
+	holdWith := func(key string, exp time.Time, provided bool) domain.Hold {
+		return domain.Hold{
+			ID: uuid.New(), TenantID: f.tenantID, AccountID: f.wallet.ID,
+			IdempotencyKey: key, Amount: money.Amount{Asset: "USD", Units: 500},
+			Status: domain.HoldActive, ExpiresAt: exp, ExpiresAtProvided: provided,
+			CreatedAt: time.Now().UTC(),
+		}
+	}
+	hk := "idem-hold-exp-" + uuid.NewString()
+	e1 := time.Now().UTC().Add(2 * time.Hour)
+	e2 := time.Now().UTC().Add(48 * time.Hour)
+	if _, replayed, err := s.CreateHold(ctx, holdWith(hk, e1, true)); err != nil || replayed {
+		t.Fatalf("first hold with explicit expires_at: replayed=%v err=%v", replayed, err)
+	}
+	if _, replayed, err := s.CreateHold(ctx, holdWith(hk, e1, true)); err != nil || !replayed {
+		t.Fatalf("same explicit expires_at must replay: replayed=%v err=%v", replayed, err)
+	}
+	if _, _, err := s.CreateHold(ctx, holdWith(hk, e2, true)); !errors.Is(err, app.ErrIdempotencyConflict) {
+		t.Fatalf("different expires_at reuse: err=%v, want ErrIdempotencyConflict", err)
+	}
+}
+
+// ---- R-008: reverse is idempotent by fingerprint ----------------------------
+
+func TestReverseIdempotencyFingerprint(t *testing.T) {
+	s := mustStore(t)
+	f := newFixture(t, s)
+	ctx := context.Background()
+
+	tx := postedTx(f, "rev-idem-"+uuid.NewString(), 10000)
+	if _, _, err := s.CreateTransaction(ctx, tx); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	key := "rev-key-" + uuid.NewString()
+	rev, replayed, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, key, "customer refund", time.Now().UTC())
+	if err != nil || replayed {
+		t.Fatalf("first reverse: replayed=%v err=%v", replayed, err)
+	}
+	// Same key + same reason -> replay the stored reversal.
+	if again, replayed, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, key, "customer refund", time.Now().UTC()); err != nil || !replayed || again.ID != rev.ID {
+		t.Fatalf("same reversal retry = (%v, replayed=%v, %v), want original id and replayed=true", again.ID, replayed, err)
+	}
+	// Same key + DIFFERENT reason -> 409 conflict.
+	if _, _, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, key, "different reason", time.Now().UTC()); !errors.Is(err, app.ErrIdempotencyConflict) {
+		t.Fatalf("reversal key reused with different reason: err=%v, want ErrIdempotencyConflict", err)
+	}
+}
+
 // ---- LC-004: runtime role cannot bypass append-only -------------------------
 
 func TestRuntimeRoleCannotBypassAppendOnly(t *testing.T) {
@@ -186,7 +280,14 @@ func TestPurgeExpiredSandboxTenant(t *testing.T) {
 	s, pool := newTestStore(t)
 	ctx := context.Background()
 
-	// Skip unless ledgercore_maint owns the purge function (infra step).
+	// The sanctioned purge is only meaningful under the real role model:
+	// ledgercore_maint must OWN the SECURITY DEFINER function (so current_user
+	// becomes ledgercore_maint inside it and the append-only bypass engages),
+	// and grants.sql must have granted EXECUTE to the runtime role. We do NOT
+	// silently skip when this is missing (that is exactly how R-005 hid): if
+	// the environment is expected to be provisioned we FAIL with actionable
+	// guidance. Provision it by running with LEDGERCORE_TEST_ADMIN_URL set (see
+	// main_test.go) or by applying infra/postgres/init + migrate/grants.sql.
 	var configured bool
 	if err := pgxutil.WithSystemTx(ctx, pool, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
@@ -200,24 +301,76 @@ func TestPurgeExpiredSandboxTenant(t *testing.T) {
 		t.Fatalf("probe purge function owner: %v", err)
 	}
 	if !configured {
-		t.Skip("ledgercore_maint does not yet own purge_expired_sandbox_tenant; infra coordination pending")
+		t.Fatal("purge_expired_sandbox_tenant is not owned by ledgercore_maint: the real role model is not provisioned. " +
+			"Run the integration suite with LEDGERCORE_TEST_ADMIN_URL set to a superuser DSN (see main_test.go), " +
+			"or apply infra/postgres/init/01-init.sql + infra/postgres/migrate/grants.sql before testing. Refusing to skip (R-005).")
 	}
 
 	f := newFixture(t, s) // sandbox ledger
+	// Seed a hold too, so the purge has to clear more than transactions.
 	if _, _, err := s.CreateTransaction(ctx, postedTx(f, "purge-"+uuid.NewString(), 10000)); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	if _, _, err := s.CreateHold(ctx, domain.Hold{
+		ID: uuid.New(), TenantID: f.tenantID, AccountID: f.wallet.ID,
+		IdempotencyKey: "purge-hold-" + uuid.NewString(),
+		Amount:         money.Amount{Asset: "USD", Units: 100},
+		Status:         domain.HoldActive, ExpiresAt: time.Now().UTC().Add(time.Hour),
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed hold: %v", err)
+	}
+
+	// Count real rows before the purge, under this tenant's RLS context.
+	before := countTenantRows(t, pool, f.tenantID)
+	if before == 0 {
+		t.Fatal("precondition: expected seeded rows for the tenant, found none")
+	}
+
 	deleted, err := natsconsumer.PurgeTenant(ctx, pool, f.tenantID)
 	if err != nil {
 		t.Fatalf("purge: %v", err)
 	}
 	if deleted == 0 {
-		t.Error("purge deleted 0 rows, want > 0")
+		t.Fatal("purge deleted 0 rows, want > 0 — the sanctioned purge is a no-op under FORCE RLS (R-005 regression)")
 	}
+
+	// Prove the rows are actually GONE (not merely a non-zero return value).
+	if after := countTenantRows(t, pool, f.tenantID); after != 0 {
+		t.Fatalf("after purge the tenant still owns %d rows across ledger tables, want 0 (R-005)", after)
+	}
+	t.Logf("R-005 purge deleted %d rows; tenant now owns 0 rows across all ledger tables", deleted)
+
 	// Idempotent: a second purge finds nothing.
 	if again, err := natsconsumer.PurgeTenant(ctx, pool, f.tenantID); err != nil || again != 0 {
 		t.Errorf("second purge = (%d, %v), want (0, nil)", again, err)
 	}
+}
+
+// countTenantRows totals the rows a tenant owns across every ledger table,
+// read under that tenant's RLS context so it reflects exactly what the purge
+// is meant to remove.
+func countTenantRows(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID) int64 {
+	t.Helper()
+	var total int64
+	err := pgxutil.WithTenantTx(context.Background(), pool, tenantID, func(tx pgx.Tx) error {
+		for _, table := range []string{
+			"ledgers", "accounts", "transactions", "postings",
+			"account_balances", "holds", "idempotency_keys", "outbox",
+		} {
+			var n int64
+			if err := tx.QueryRow(context.Background(),
+				`SELECT count(*) FROM `+table+` WHERE tenant_id = $1`, tenantID).Scan(&n); err != nil {
+				return err
+			}
+			total += n
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("count tenant rows: %v", err)
+	}
+	return total
 }
 
 // ---- Verifier: postings vs account_balances ---------------------------------

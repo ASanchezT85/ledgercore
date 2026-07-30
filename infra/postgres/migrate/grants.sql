@@ -45,3 +45,11 @@ BEGIN
         END LOOP;
     END LOOP;
 END $$;
+
+-- Webhooks maintenance functions (claim_due_deliveries, set_encrypted_secret)
+-- run as ledgercore_maint and UPDATE their tables. The init grants maint only
+-- SELECT+DELETE ("no INSERT/UPDATE"), so without this those SECURITY DEFINER
+-- functions would fail. Granting UPDATE only on the webhooks tables keeps the
+-- role narrow (still no INSERT anywhere; UPDATE only where a sanctioned maint
+-- function needs it). maint is NOLOGIN and reachable only via those functions.
+GRANT UPDATE ON webhooks.subscriptions, webhooks.deliveries TO ledgercore_maint;

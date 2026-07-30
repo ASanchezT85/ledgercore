@@ -27,6 +27,14 @@ services:
       POSTGRES_DB: ledgercore
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      # Per-role passwords consumed by init/01-init.sql via psql \getenv (R-003).
+      # Dev DEFAULTS here so a bare `docker compose up` works; the sandbox
+      # overlay makes them REQUIRED so production never boots with these values.
+      LEDGERCORE_MIGRATOR_PASSWORD: "${LEDGERCORE_MIGRATOR_PASSWORD:-ledgercore_migrator_dev}"
+      LEDGERCORE_LEDGER_RT_PASSWORD: "${LEDGERCORE_LEDGER_RT_PASSWORD:-ledgercore_ledger_rt_dev}"
+      LEDGERCORE_IDENTITY_RT_PASSWORD: "${LEDGERCORE_IDENTITY_RT_PASSWORD:-ledgercore_identity_rt_dev}"
+      LEDGERCORE_RECON_RT_PASSWORD: "${LEDGERCORE_RECON_RT_PASSWORD:-ledgercore_recon_rt_dev}"
+      LEDGERCORE_WEBHOOKS_RT_PASSWORD: "${LEDGERCORE_WEBHOOKS_RT_PASSWORD:-ledgercore_webhooks_rt_dev}"
     ports:
       - "5432:5432"
     volumes:
@@ -55,7 +63,7 @@ services:
       - go_cache:/go
     environment:
       GOFLAGS: "-mod=mod"
-      MIGRATOR_DSN: "postgres://ledgercore_migrator:ledgercore_migrator_dev@postgres:5432/ledgercore?sslmode=disable"
+      MIGRATOR_DSN: "postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD:-ledgercore_migrator_dev}@postgres:5432/ledgercore?sslmode=disable"
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -124,7 +132,7 @@ services:
     environment:
       LEDGERCORE_HTTP_ADDR: ":8081"
       # Runtime role: DML-only on the ledger schema, NOBYPASSRLS, no DDL.
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_ledger_rt:ledgercore_ledger_rt_dev@postgres:5432/ledgercore?search_path=ledger"
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_ledger_rt:${LEDGERCORE_LEDGER_RT_PASSWORD:-ledgercore_ledger_rt_dev}@postgres:5432/ledgercore?search_path=ledger"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
       # Migrations run in the `migrate` one-shot as the owner role; runtime
@@ -156,7 +164,7 @@ services:
     environment:
       LEDGERCORE_HTTP_ADDR: ":8082"
       # Runtime role: DML-only on the identity schema, NOBYPASSRLS, no DDL.
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_identity_rt:ledgercore_identity_rt_dev@postgres:5432/ledgercore?search_path=identity"
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_identity_rt:${LEDGERCORE_IDENTITY_RT_PASSWORD:-ledgercore_identity_rt_dev}@postgres:5432/ledgercore?search_path=identity"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
       LEDGERCORE_AUTO_MIGRATE: "false"
@@ -190,7 +198,7 @@ services:
     environment:
       LEDGERCORE_HTTP_ADDR: ":8083"
       # Runtime role: DML-only on the recon schema, NOBYPASSRLS, no DDL.
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_recon_rt:ledgercore_recon_rt_dev@postgres:5432/ledgercore?search_path=recon"
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_recon_rt:${LEDGERCORE_RECON_RT_PASSWORD:-ledgercore_recon_rt_dev}@postgres:5432/ledgercore?search_path=recon"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
       LEDGERCORE_AUTO_MIGRATE: "false"
@@ -218,11 +226,15 @@ services:
     environment:
       LEDGERCORE_HTTP_ADDR: ":8084"
       # Runtime role: DML-only on the webhooks schema, NOBYPASSRLS, no DDL.
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_webhooks_rt:ledgercore_webhooks_rt_dev@postgres:5432/ledgercore?search_path=webhooks"
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_webhooks_rt:${LEDGERCORE_WEBHOOKS_RT_PASSWORD:-ledgercore_webhooks_rt_dev}@postgres:5432/ledgercore?search_path=webhooks"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
       LEDGERCORE_AUTO_MIGRATE: "false"
       LEDGERCORE_AUTH_DISABLED: "true"
+      # Webhooks encrypts subscription secrets at rest (AES-256-GCM) and refuses
+      # to start in sandbox-public without this key (R-002). Same key + syntax
+      # as identity; dev default here, REQUIRED in the sandbox overlay.
+      LEDGERCORE_MASTER_KEY: "${LEDGERCORE_MASTER_KEY:-6465762d6f6e6c792d6d61737465722d6b65792d33322d62797465732d646576}"
     ports:
       - "8084:8084"
     depends_on:

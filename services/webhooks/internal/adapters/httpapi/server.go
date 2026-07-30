@@ -24,19 +24,34 @@ type server struct {
 
 // NewHandler assembles the full HTTP handler: health endpoints (public) and
 // the /v1 API behind authentication.
+//
+// Auth (R-007): every /v1 route is behind ident.RequireAuthConfig, which
+// validates the EdDSA signature plus iss, this service's audience ("webhooks")
+// and a bounded clock skew — matching reconciliation. Authorization (R-006):
+// each route additionally requires a scope — webhooks:read for GETs,
+// webhooks:write for state changes — so a token without the right scope is
+// rejected with 403 (deny by default).
 func NewHandler(svc *app.Service, pool *pgxpool.Pool, cfg config.Config) http.Handler {
 	s := &server{svc: svc, pool: pool}
 
-	api := http.NewServeMux()
-	api.HandleFunc("POST /v1/webhook-subscriptions", s.createSubscription)
-	api.HandleFunc("GET /v1/webhook-subscriptions", s.listSubscriptions)
-	api.HandleFunc("GET /v1/webhook-subscriptions/{id}", s.getSubscription)
-	api.HandleFunc("PATCH /v1/webhook-subscriptions/{id}", s.updateSubscription)
-	api.HandleFunc("POST /v1/webhook-subscriptions/{id}/rotate-secret", s.rotateSecret)
-	api.HandleFunc("GET /v1/webhook-deliveries", s.listDeliveries)
-	api.HandleFunc("POST /v1/webhook-deliveries/{id}/retry", s.retryDelivery)
+	read := ident.RequireScope(ident.ScopeWebhooksRead)
+	write := ident.RequireScope(ident.ScopeWebhooksWrite)
 
-	auth := ident.RequireAuth(cfg.JWKSURL, cfg.AuthDisabled)
+	api := http.NewServeMux()
+	api.Handle("POST /v1/webhook-subscriptions", write(http.HandlerFunc(s.createSubscription)))
+	api.Handle("GET /v1/webhook-subscriptions", read(http.HandlerFunc(s.listSubscriptions)))
+	api.Handle("GET /v1/webhook-subscriptions/{id}", read(http.HandlerFunc(s.getSubscription)))
+	api.Handle("PATCH /v1/webhook-subscriptions/{id}", write(http.HandlerFunc(s.updateSubscription)))
+	api.Handle("POST /v1/webhook-subscriptions/{id}/rotate-secret", write(http.HandlerFunc(s.rotateSecret)))
+	api.Handle("GET /v1/webhook-deliveries", read(http.HandlerFunc(s.listDeliveries)))
+	api.Handle("POST /v1/webhook-deliveries/{id}/retry", write(http.HandlerFunc(s.retryDelivery)))
+
+	auth := ident.RequireAuthConfig(ident.AuthConfig{
+		JWKSURL:          cfg.JWKSURL,
+		AuthDisabled:     cfg.AuthDisabled,
+		ExpectedIssuer:   ident.DefaultIssuer,
+		ExpectedAudience: ident.AudienceWebhooks,
+	})
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", s.healthz)

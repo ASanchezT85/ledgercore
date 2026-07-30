@@ -8,9 +8,14 @@
 #
 # Usage:
 #   scripts/ci-local.sh                 # build+vet+test+lint+drift from clean clone
-#   LEDGERCORE_TEST_DATABASE_URL=... scripts/ci-local.sh   # also run DB gates
+#   LEDGERCORE_CI_PG_ADMIN_URL=postgres://postgres:postgres@localhost:5432/ledgercore \
+#     scripts/ci-local.sh               # ALSO run the 4-service Postgres gates
 #
-# Requires: go 1.26, node/npx, git. Optional: a Postgres for the RLS/role gates.
+# Requires: go 1.26, node/npx, git. Optional (for the DB gates): a reachable
+# empty Postgres 17 reachable at LEDGERCORE_CI_PG_ADMIN_URL (a superuser DSN)
+# plus goose (auto-installed if absent). The DB gates mirror the CI
+# `pg-integration` matrix: init SQL -> goose migrate -> grants.sql ->
+# per-service integration + RLS + purge tests, each on its own schema/role.
 set -uo pipefail
 
 ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
@@ -53,11 +58,40 @@ for src in contracts/openapi/*.yaml; do
   else echo "ok: $copy in sync" | tee -a "$LOG"; fi
 done
 
-say "NOTE: RLS-contract + role-separation gates"
-echo "These run as dedicated jobs in .github/workflows/ci.yml against a real"       | tee -a "$LOG"
-echo "Postgres (services: postgres:17 + infra/postgres/init/01-init.sql). They were" | tee -a "$LOG"
-echo "verified green during P0 remediation (see docs/evidencia-reauditoria.md) and"  | tee -a "$LOG"
-echo "in production (LC-001 negative test, FORCE RLS on 17 tables, 6 separate roles)." | tee -a "$LOG"
+say "Postgres integration gates (4 services)"
+PG_ADMIN="${LEDGERCORE_CI_PG_ADMIN_URL:-}"
+if [ -z "$PG_ADMIN" ]; then
+  echo "SKIPPED — set LEDGERCORE_CI_PG_ADMIN_URL to a superuser DSN of an empty" | tee -a "$LOG"
+  echo "Postgres 17 to run these locally. In CI they run as the pg-integration" | tee -a "$LOG"
+  echo "matrix (.github/workflows/ci.yml): init SQL + goose migrate + grants.sql" | tee -a "$LOG"
+  echo "+ per-service integration/RLS/purge tests. NOT counted as green here."    | tee -a "$LOG"
+else
+  # Dev role passwords consumed by init/01-init.sql via psql \getenv (R-003).
+  export LEDGERCORE_MIGRATOR_PASSWORD="${LEDGERCORE_MIGRATOR_PASSWORD:-ledgercore_migrator_dev}"
+  export LEDGERCORE_LEDGER_RT_PASSWORD="${LEDGERCORE_LEDGER_RT_PASSWORD:-ledgercore_ledger_rt_dev}"
+  export LEDGERCORE_IDENTITY_RT_PASSWORD="${LEDGERCORE_IDENTITY_RT_PASSWORD:-ledgercore_identity_rt_dev}"
+  export LEDGERCORE_RECON_RT_PASSWORD="${LEDGERCORE_RECON_RT_PASSWORD:-ledgercore_recon_rt_dev}"
+  export LEDGERCORE_WEBHOOKS_RT_PASSWORD="${LEDGERCORE_WEBHOOKS_RT_PASSWORD:-ledgercore_webhooks_rt_dev}"
+  MIG_BASE="postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD}@$(echo "$PG_ADMIN" | sed 's#^[a-z]*://[^@]*@##')"
+
+  command -v goose >/dev/null 2>&1 || run go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
+  export PATH="$PATH:$(go env GOPATH)/bin"
+
+  say "provision roles + schemas (init SQL)"
+  run psql "$PG_ADMIN" -v ON_ERROR_STOP=1 -f infra/postgres/init/01-init.sql || fail=1
+
+  for pair in "ledger-core:ledger" "identity:identity" "reconciliation:recon" "webhooks:webhooks"; do
+    svc="${pair%%:*}"; schema="${pair##*:}"
+    say "migrate + grants + integration — $svc ($schema)"
+    run goose -dir "services/$svc/internal/adapters/postgres/migrations" postgres \
+      "${MIG_BASE}?sslmode=disable&search_path=${schema}" up || fail=1
+    run psql "$MIG_BASE" -v ON_ERROR_STOP=1 -f infra/postgres/migrate/grants.sql || fail=1
+    ( cd "services/$svc" && \
+      LEDGERCORE_TEST_DATABASE_URL="${MIG_BASE}?search_path=${schema}" \
+      go test ./internal/adapters/postgres/... -count=1 ) 2>&1 | tee -a "$LOG"
+    [ "${PIPESTATUS[0]}" -eq 0 ] || fail=1
+  done
+fi
 
 say "RESULT"
 if [ "$fail" -eq 0 ]; then echo "GREEN — all runnable gates passed. Evidence: $LOG" | tee -a "$LOG"

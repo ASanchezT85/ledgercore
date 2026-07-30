@@ -18,8 +18,9 @@
 #
 # Output: OUTDIR/ledgercore-<ref>-<shortsha>.tar.gz
 #
-# Requirements: git. Optional: gitleaks (strongly recommended — the scan is
-# skipped with a loud warning if it is absent).
+# Requirements: git AND gitleaks. gitleaks is MANDATORY (R-001): the script
+# aborts if it is not on PATH rather than shipping an unscanned archive. Set
+# EXPORT_ALLOW_NO_GITLEAKS=1 only for an explicit, deliberate local dry-run.
 set -euo pipefail
 
 REF="${1:-HEAD}"
@@ -46,19 +47,25 @@ echo ">> Exporting tracked source at ${REF} (${SHORT_SHA})"
 #    filesystem scan of a temporary checkout if history scanning is not wanted.
 #    gitleaks exits non-zero when it finds a secret; we propagate that.
 # ---------------------------------------------------------------------------
+HAVE_GITLEAKS=0
 if command -v gitleaks >/dev/null 2>&1; then
-    echo ">> Scanning for secrets with gitleaks (git history up to ${REF})"
+    HAVE_GITLEAKS=1
+    echo ">> Scanning git history for secrets with gitleaks (up to ${REF})"
     if ! gitleaks detect --source "$REPO_ROOT" --redact --no-banner \
         --log-opts="--all"; then
-        echo "error: gitleaks detected potential secrets — refusing to export." >&2
+        echo "error: gitleaks detected potential secrets in history — refusing to export." >&2
         echo "       Review the findings above, purge the secret, and rotate it." >&2
         exit 2
     fi
-    echo ">> gitleaks: clean"
+    echo ">> gitleaks (history): clean"
+elif [ "${EXPORT_ALLOW_NO_GITLEAKS:-0}" = "1" ]; then
+    echo "WARNING: gitleaks not found but EXPORT_ALLOW_NO_GITLEAKS=1 — proceeding" >&2
+    echo "         WITHOUT a secret scan. Do NOT ship this archive externally." >&2
 else
-    echo "WARNING: gitleaks not found on PATH — SKIPPING the secret scan." >&2
-    echo "         Install it (https://github.com/gitleaks/gitleaks) before" >&2
-    echo "         shipping this archive to an external party." >&2
+    echo "error: gitleaks is not on PATH — refusing to build an unscanned export." >&2
+    echo "       Install it (https://github.com/gitleaks/gitleaks) and re-run." >&2
+    echo "       For a local dry-run only: EXPORT_ALLOW_NO_GITLEAKS=1 $0 ..." >&2
+    exit 3
 fi
 
 # ---------------------------------------------------------------------------
@@ -72,6 +79,27 @@ git archive --format=tar.gz \
     --prefix="ledgercore-${SHORT_SHA}/" \
     -o "$ARCHIVE" \
     "$REF"
+
+# ---------------------------------------------------------------------------
+# 3. Belt-and-suspenders: scan the ACTUAL bytes we are about to ship. `git
+#    archive` cannot include untracked files, but this proves it on the exact
+#    artifact (catches a tracked secret, an export-ignore mistake, or a future
+#    change to how the archive is built). Extract to a temp dir and run
+#    gitleaks in no-git (filesystem) mode; any finding aborts and deletes the
+#    archive so a leaky package can never be handed off.
+# ---------------------------------------------------------------------------
+if [ "$HAVE_GITLEAKS" = "1" ]; then
+    echo ">> Scanning the built archive with gitleaks (filesystem mode)"
+    SCAN_DIR="$(mktemp -d)"
+    trap 'rm -rf "$SCAN_DIR"' EXIT
+    tar xzf "$ARCHIVE" -C "$SCAN_DIR"
+    if ! gitleaks detect --source "$SCAN_DIR" --no-git --redact --no-banner; then
+        echo "error: gitleaks detected secrets INSIDE the built archive — deleting it." >&2
+        rm -f "$ARCHIVE"
+        exit 2
+    fi
+    echo ">> gitleaks (archive): clean"
+fi
 
 SIZE="$(du -h "$ARCHIVE" | cut -f1)"
 echo ">> Done: $ARCHIVE ($SIZE)"

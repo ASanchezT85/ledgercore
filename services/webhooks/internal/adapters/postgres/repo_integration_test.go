@@ -34,8 +34,10 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	// Clean slate for this run (owner bypasses RLS in the test database).
-	if err := pgxutil.WithSystemTx(ctx, pool, func(tx pgx.Tx) error {
+	applyMaintGrants(t, pool)
+	// Clean slate for this run. The cross-tenant DELETE runs under the
+	// maintenance identity (no permissive policy exists anymore, R-004).
+	if err := withMaintTx(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, "DELETE FROM deliveries"); err != nil {
 			return err
 		}
@@ -45,6 +47,69 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("clean tables: %v", err)
 	}
 	return pool
+}
+
+// maintRoleExists reports whether the ledgercore_maint role is provisioned in
+// the connected cluster (it is under the production/CI role model; a bare dev
+// superuser cluster may lack it).
+func maintRoleExists(ctx context.Context, pool *pgxpool.Pool) bool {
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ledgercore_maint')").Scan(&exists); err != nil {
+		return false
+	}
+	return exists
+}
+
+// applyMaintGrants simulates the infra post-migration step
+// (infra/postgres/migrate/grants.sql): it reassigns every SECURITY DEFINER
+// function in the webhooks schema to ledgercore_maint and grants the privileges
+// the maintenance functions need (EXECUTE to the runtime roles, plus UPDATE on
+// the two tables — init grants maint only SELECT + DELETE). Without this the
+// R-004 functions correctly fail closed. No-op when the role model is absent
+// (e.g. a superuser dev cluster that bypasses RLS anyway).
+func applyMaintGrants(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	if !maintRoleExists(ctx, pool) {
+		return
+	}
+	stmts := []string{
+		`DO $$
+		 DECLARE fn text;
+		 BEGIN
+		     FOR fn IN
+		         SELECT p.oid::regprocedure::text
+		         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+		         WHERE n.nspname = 'webhooks' AND p.prosecdef
+		     LOOP
+		         EXECUTE format('ALTER FUNCTION %s OWNER TO ledgercore_maint', fn);
+		         EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO ledgercore_webhooks_rt', fn);
+		     END LOOP;
+		 END $$;`,
+		`GRANT UPDATE ON webhooks.subscriptions, webhooks.deliveries TO ledgercore_maint`,
+	}
+	for _, s := range stmts {
+		if _, err := pool.Exec(ctx, s); err != nil {
+			t.Fatalf("apply maint grants: %v", err)
+		}
+	}
+}
+
+// withMaintTx runs fn inside a transaction under the ledgercore_maint identity
+// (SET LOCAL ROLE), so cross-tenant maintenance reads/writes in tests match the
+// sanctioned SECURITY DEFINER path. Falls back to a plain system transaction
+// when the role model is absent.
+func withMaintTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+	if !maintRoleExists(ctx, pool) {
+		return pgxutil.WithSystemTx(ctx, pool, fn)
+	}
+	return pgxutil.WithSystemTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SET LOCAL ROLE ledgercore_maint"); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
 }
 
 func TestRepoEndToEnd(t *testing.T) {

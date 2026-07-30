@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/keycrypt"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/signature"
@@ -151,13 +150,15 @@ func TestReencryptPlaintextSecrets(t *testing.T) {
 	}
 }
 
-// readColumn reads a single text column of a subscription row directly, in a
-// system transaction (bypasses the repo decryption).
+// readColumn reads a single text column of a subscription row directly,
+// bypassing the repo decryption. It reads under the maintenance identity
+// because the cross-tenant (tenant-context-free) read is no longer served by a
+// permissive policy (R-004).
 func readColumn(t *testing.T, pool *pgxpool.Pool, id uuid.UUID, col string) string {
 	t.Helper()
 	ctx := context.Background()
 	var v *string
-	err := pgxutil.WithSystemTx(ctx, pool, func(tx pgx.Tx) error {
+	err := withMaintTx(ctx, pool, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, "SELECT "+col+" FROM subscriptions WHERE id = $1", id).Scan(&v)
 	})
 	if err != nil {

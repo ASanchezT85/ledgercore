@@ -43,16 +43,26 @@ jobs:
       - name: Vulnerability scan (govulncheck)
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  # Mandatory anti-leak gate (blueprint §14, Fase 1a): the RLS contract test
-  # runs against a real Postgres provisioned exactly like production (schemas
-  # owned by the migrator + per-service NOBYPASSRLS runtime roles + goose
-  # migrations). The test harness applies migrations and then queries over the
-  # same connection, so it runs as the migrator; FORCE ROW LEVEL SECURITY in
-  # the migrations makes the tenant policies apply even to the owner, so a
+  # Mandatory anti-leak + integration gate (blueprint §14, Fase 1a). Runs the
+  # Postgres integration + RLS tests of ALL FOUR services against a real
+  # Postgres provisioned exactly like production: schemas owned by the migrator,
+  # per-service NOBYPASSRLS runtime roles, goose migrations applied as the
+  # migrator, and grants.sql applied afterwards so the SECURITY DEFINER purge
+  # functions are owned by ledgercore_maint (this is what UN-skips the LC-004
+  # purge test — see R-005/R-009). Tests connect as the migrator; FORCE ROW
+  # LEVEL SECURITY makes tenant policies apply even to the owner, so a
   # cross-tenant leak still fails the gate. No continue-on-error.
-  rls-contract:
-    name: rls contract (ledger-core + postgres)
+  pg-integration:
+    name: postgres integration (${{ matrix.svc.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        svc:
+          - { name: ledger-core,    schema: ledger,   dir: services/ledger-core/internal/adapters/postgres/migrations }
+          - { name: identity,       schema: identity, dir: services/identity/internal/adapters/postgres/migrations }
+          - { name: reconciliation, schema: recon,    dir: services/reconciliation/internal/adapters/postgres/migrations }
+          - { name: webhooks,       schema: webhooks, dir: services/webhooks/internal/adapters/postgres/migrations }
     services:
       postgres:
         image: postgres:17
@@ -67,24 +77,42 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+    env:
+      # init/01-init.sql reads role passwords from the environment via psql
+      # \getenv (R-003). CI uses the dev defaults on a throwaway database.
+      LEDGERCORE_MIGRATOR_PASSWORD: ledgercore_migrator_dev
+      LEDGERCORE_LEDGER_RT_PASSWORD: ledgercore_ledger_rt_dev
+      LEDGERCORE_IDENTITY_RT_PASSWORD: ledgercore_identity_rt_dev
+      LEDGERCORE_RECON_RT_PASSWORD: ledgercore_recon_rt_dev
+      LEDGERCORE_WEBHOOKS_RT_PASSWORD: ledgercore_webhooks_rt_dev
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
-          cache-dependency-path: services/ledger-core/go.sum
+          cache-dependency-path: services/${{ matrix.svc.name }}/go.sum
 
-      - name: Provision app role and schemas (init SQL)
+      - name: Provision roles and schemas (init SQL)
         run: psql "postgres://postgres:postgres@localhost:5432/ledgercore" -v ON_ERROR_STOP=1 -f infra/postgres/init/01-init.sql
 
-      - name: Run integration tests (migrations run inside the test harness)
-        working-directory: services/ledger-core
-        env:
-          LEDGERCORE_TEST_DATABASE_URL: "postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore?search_path=ledger"
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
+
+      - name: Apply migrations as the migrator
         run: |
-          go test ./internal/adapters/postgres/ -run TestRLSCrossTenantIsolation -v
-          go test ./... -count=1
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          goose -dir "${{ matrix.svc.dir }}" postgres \
+            "postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD}@localhost:5432/ledgercore?sslmode=disable&search_path=${{ matrix.svc.schema }}" up
+
+      - name: Apply post-migration grants (maint ownership; un-skips the purge test)
+        run: psql "postgres://ledgercore_migrator:${LEDGERCORE_MIGRATOR_PASSWORD}@localhost:5432/ledgercore" -v ON_ERROR_STOP=1 -f infra/postgres/migrate/grants.sql
+
+      - name: Integration + RLS tests (connect as migrator; FORCE RLS still applies)
+        working-directory: services/${{ matrix.svc.name }}
+        env:
+          LEDGERCORE_TEST_DATABASE_URL: "postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore?search_path=${{ matrix.svc.schema }}"
+        run: go test ./internal/adapters/postgres/... -count=1 -v
 
   # Infra role-model gate (LC-014 / LC-002). Provisions the init SQL and proves
   # the privilege boundaries directly: a runtime role can DML its own schema but
@@ -172,11 +200,38 @@ jobs:
   compose-validate:
     name: compose config
     runs-on: ubuntu-latest
+    # Dummy values so the sandbox/vps overlays (which use ${VAR:?}) render.
+    # These are only for `config` validation — never a real deployment.
+    env:
+      LEDGERCORE_DOMAIN: sandbox.example.test
+      LEDGERCORE_ACME_EMAIL: ops@example.test
+      LEDGERCORE_BASE_DOMAIN: example.test
+      LEDGERCORE_ADMIN_TOKEN: ci-dummy-admin-token
+      LEDGERCORE_MASTER_KEY: ci-dummy-master-key
+      POSTGRES_PASSWORD: ci-dummy-postgres
+      LEDGERCORE_MIGRATOR_PASSWORD: ci-dummy-migrator
+      LEDGERCORE_LEDGER_RT_PASSWORD: ci-dummy-ledger
+      LEDGERCORE_IDENTITY_RT_PASSWORD: ci-dummy-identity
+      LEDGERCORE_RECON_RT_PASSWORD: ci-dummy-recon
+      LEDGERCORE_WEBHOOKS_RT_PASSWORD: ci-dummy-webhooks
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate compose file
+      - name: Validate base compose file
         run: docker compose -f infra/compose/docker-compose.yml config -q
+
+      - name: Validate public sandbox overlay
+        run: |
+          docker compose \
+            -f infra/compose/docker-compose.yml \
+            -f infra/compose/docker-compose.sandbox.yml config -q
+
+      - name: Validate shared-VPS overlay
+        run: |
+          docker compose \
+            -f infra/compose/docker-compose.yml \
+            -f infra/compose/docker-compose.sandbox.yml \
+            -f infra/compose/docker-compose.vps-shared.yml config -q
 
   # Secret scanning (LC-003): fail the PR if a credential is committed. Runs on
   # the full history of the checkout so a secret introduced and later "removed"

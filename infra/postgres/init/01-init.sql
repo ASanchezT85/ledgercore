@@ -34,15 +34,42 @@
 -- This is what closes LC-002: RLS is no longer skippable by the app role,
 -- and LC-014: a compromised service cannot read or write another schema.
 --
--- Dev-only credentials below — NEVER reuse outside the local compose stack.
--- The public sandbox overlay injects strong secrets via environment.
+-- ============================================================================
+-- Role passwords come from the environment (R-003) — NEVER hard-coded here.
+-- ============================================================================
+-- This script runs as the Postgres superuser during first-init (either from
+-- the image entrypoint under /docker-entrypoint-initdb.d, or from `psql -f`
+-- in CI). psql \getenv reads the process environment, so every role password
+-- is injected by the caller:
+--
+--   * docker-compose.yml (dev)     seeds these vars with `*_dev` DEFAULTS, so
+--                                  a bare `docker compose up` still works.
+--   * docker-compose.sandbox.yml   makes them REQUIRED (${VAR:?}) so the public
+--                                  overlay CANNOT boot with a repo-known value.
+--   * CI                           exports the `*_dev` values explicitly.
+--
+-- If a variable is unset, \getenv leaves the psql variable undefined and the
+-- CREATE ROLE below fails loudly — fail-closed, never a silent blank password.
+--
+-- Required environment variables:
+--   LEDGERCORE_MIGRATOR_PASSWORD
+--   LEDGERCORE_LEDGER_RT_PASSWORD
+--   LEDGERCORE_IDENTITY_RT_PASSWORD
+--   LEDGERCORE_RECON_RT_PASSWORD
+--   LEDGERCORE_WEBHOOKS_RT_PASSWORD
+-- (ledgercore_maint has NO password: it is NOLOGIN.)
+\getenv migrator_pw   LEDGERCORE_MIGRATOR_PASSWORD
+\getenv ledger_pw     LEDGERCORE_LEDGER_RT_PASSWORD
+\getenv identity_pw   LEDGERCORE_IDENTITY_RT_PASSWORD
+\getenv recon_pw      LEDGERCORE_RECON_RT_PASSWORD
+\getenv webhooks_pw   LEDGERCORE_WEBHOOKS_RT_PASSWORD
 
 -- ---------------------------------------------------------------------------
 -- 1. Migrator / owner role (DDL only, never runtime).
 -- ---------------------------------------------------------------------------
 CREATE ROLE ledgercore_migrator
     LOGIN
-    PASSWORD 'ledgercore_migrator_dev'
+    PASSWORD :'migrator_pw'
     NOSUPERUSER
     NOCREATEDB
     NOCREATEROLE
@@ -73,25 +100,33 @@ GRANT ledgercore_maint TO ledgercore_migrator;
 -- 3. Per-service runtime roles (DML only, own schema only).
 -- ---------------------------------------------------------------------------
 CREATE ROLE ledgercore_ledger_rt
-    LOGIN PASSWORD 'ledgercore_ledger_rt_dev'
+    LOGIN PASSWORD :'ledger_pw'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
 CREATE ROLE ledgercore_identity_rt
-    LOGIN PASSWORD 'ledgercore_identity_rt_dev'
+    LOGIN PASSWORD :'identity_pw'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
 CREATE ROLE ledgercore_recon_rt
-    LOGIN PASSWORD 'ledgercore_recon_rt_dev'
+    LOGIN PASSWORD :'recon_pw'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
 CREATE ROLE ledgercore_webhooks_rt
-    LOGIN PASSWORD 'ledgercore_webhooks_rt_dev'
+    LOGIN PASSWORD :'webhooks_pw'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
 -- ---------------------------------------------------------------------------
 -- 4. One schema per service, all OWNED BY THE MIGRATOR. Services never own a
 --    schema, so a runtime role cannot run DDL even against its own schema.
 -- ---------------------------------------------------------------------------
+-- The migrator is the DDL role: besides owning the schemas below, it may create
+-- schemas (e.g. a test harness pointed at a bare database, or a future service).
+-- This is a migrator-only privilege; runtime roles remain NOCREATEDB and get no
+-- database-level CREATE, so this does not widen any runtime blast radius.
+DO $$ BEGIN
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO ledgercore_migrator', current_database());
+END $$;
+
 CREATE SCHEMA ledger   AUTHORIZATION ledgercore_migrator;
 CREATE SCHEMA identity AUTHORIZATION ledgercore_migrator;
 CREATE SCHEMA recon    AUTHORIZATION ledgercore_migrator;

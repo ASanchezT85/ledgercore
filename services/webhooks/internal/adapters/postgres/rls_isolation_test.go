@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/ledgercore/ledgercore/libs/go/httpx"
+	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
 )
@@ -87,6 +89,42 @@ func TestRLSCrossTenantIsolation(t *testing.T) {
 		}
 		if err := repo.MarkDelivered(ctx, tenantB, del.ID, 200); err != nil {
 			t.Errorf("MarkDelivered foreign delivery: unexpected err %v", err)
+		}
+	})
+
+	t.Run("no permissive cross-tenant policy for the runtime role", func(t *testing.T) {
+		// R-004: with system_drain removed, a tenant-context-free query on the
+		// runtime/owner connection (NOT the maintenance identity) must see zero
+		// rows — deny by default — instead of every tenant's data. This is the
+		// exact escalation path the old permissive policy allowed.
+		var subCount, delCount int
+		if err := pgxutil.WithSystemTx(ctx, pool, func(tx pgx.Tx) error {
+			if err := tx.QueryRow(ctx, "SELECT count(*) FROM subscriptions").Scan(&subCount); err != nil {
+				return err
+			}
+			return tx.QueryRow(ctx, "SELECT count(*) FROM deliveries").Scan(&delCount)
+		}); err != nil {
+			t.Fatalf("system-tx count: %v", err)
+		}
+		if subCount != 0 || delCount != 0 {
+			t.Fatalf("cross-tenant leak without tenant context: %d subscriptions, %d deliveries visible (want 0/0)", subCount, delCount)
+		}
+	})
+
+	t.Run("sanctioned maintenance path still spans tenants", func(t *testing.T) {
+		// The dispatcher's ClaimDue goes through the SECURITY DEFINER function
+		// (owned by ledgercore_maint), so it still sees tenant A's due delivery
+		// even with no tenant context. This proves the cross-tenant capability
+		// moved from a blanket policy to the auditable maintenance function.
+		if !maintRoleExists(ctx, pool) {
+			t.Skip("role model not provisioned; maintenance path exercised under the full role model")
+		}
+		claimed, err := repo.ClaimDue(ctx, 10, time.Minute)
+		if err != nil {
+			t.Fatalf("claim due via maintenance function: %v", err)
+		}
+		if len(claimed) != 1 || claimed[0].TenantID != tenantA {
+			t.Fatalf("maintenance claim mismatch: %+v", claimed)
 		}
 	})
 

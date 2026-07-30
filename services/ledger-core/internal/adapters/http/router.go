@@ -13,43 +13,56 @@ import (
 
 // NewRouter assembles the full HTTP surface of ledger-core:
 //   - /healthz (liveness) and /readyz (Postgres ping) outside auth,
-//   - every /v1 route behind ident.RequireAuth (JWT EdDSA against the
-//     identity JWKS, or X-Tenant-Id when auth is disabled in dev),
+//   - every /v1 route behind ident.RequireAuthConfig (JWT EdDSA against the
+//     identity JWKS, validating iss + aud=ledger-core + bounded skew, or
+//     X-Tenant-Id when auth is disabled in dev),
+//   - each route additionally gated by a scope (LC-012 / R-006): read scope
+//     for GETs, write scope for state changes, deny by default,
 //   - request id, panic recovery and structured logging around everything.
 func NewRouter(svc *app.Service, dbPing func(context.Context) error, jwksURL string, authDisabled bool) http.Handler {
 	h := &handler{svc: svc}
 
+	read := ident.RequireScope(ident.ScopeLedgerRead)
+	write := ident.RequireScope(ident.ScopeLedgerWrite)
+
 	api := http.NewServeMux()
 
 	// Ledgers.
-	api.HandleFunc("POST /v1/ledgers", h.createLedger)
-	api.HandleFunc("GET /v1/ledgers", h.listLedgers)
-	api.HandleFunc("GET /v1/ledgers/{id}", h.getLedger)
+	api.Handle("POST /v1/ledgers", write(http.HandlerFunc(h.createLedger)))
+	api.Handle("GET /v1/ledgers", read(http.HandlerFunc(h.listLedgers)))
+	api.Handle("GET /v1/ledgers/{id}", read(http.HandlerFunc(h.getLedger)))
 
 	// Accounts.
-	api.HandleFunc("POST /v1/accounts", h.createAccount)
-	api.HandleFunc("GET /v1/accounts", h.listAccounts)
-	api.HandleFunc("GET /v1/accounts/{id}", h.getAccount)
-	api.HandleFunc("GET /v1/accounts/{id}/balances", h.getBalances)
-	api.HandleFunc("GET /v1/accounts/{id}/entries", h.listEntries)
+	api.Handle("POST /v1/accounts", write(http.HandlerFunc(h.createAccount)))
+	api.Handle("GET /v1/accounts", read(http.HandlerFunc(h.listAccounts)))
+	api.Handle("GET /v1/accounts/{id}", read(http.HandlerFunc(h.getAccount)))
+	api.Handle("GET /v1/accounts/{id}/balances", read(http.HandlerFunc(h.getBalances)))
+	api.Handle("GET /v1/accounts/{id}/entries", read(http.HandlerFunc(h.listEntries)))
 
 	// Transactions.
-	api.HandleFunc("POST /v1/transactions", h.createTransaction)
-	api.HandleFunc("GET /v1/transactions", h.listTransactions)
-	api.HandleFunc("GET /v1/transactions/{id}", h.getTransaction)
-	api.HandleFunc("POST /v1/transactions/{id}/post", h.postTransaction)
-	api.HandleFunc("POST /v1/transactions/{id}/reverse", h.reverseTransaction)
+	api.Handle("POST /v1/transactions", write(http.HandlerFunc(h.createTransaction)))
+	api.Handle("GET /v1/transactions", read(http.HandlerFunc(h.listTransactions)))
+	api.Handle("GET /v1/transactions/{id}", read(http.HandlerFunc(h.getTransaction)))
+	api.Handle("POST /v1/transactions/{id}/post", write(http.HandlerFunc(h.postTransaction)))
+	api.Handle("POST /v1/transactions/{id}/reverse", write(http.HandlerFunc(h.reverseTransaction)))
 
 	// Holds.
-	api.HandleFunc("POST /v1/holds", h.createHold)
-	api.HandleFunc("GET /v1/holds/{id}", h.getHold)
-	api.HandleFunc("POST /v1/holds/{id}/capture", h.captureHold)
-	api.HandleFunc("POST /v1/holds/{id}/release", h.releaseHold)
+	api.Handle("POST /v1/holds", write(http.HandlerFunc(h.createHold)))
+	api.Handle("GET /v1/holds/{id}", read(http.HandlerFunc(h.getHold)))
+	api.Handle("POST /v1/holds/{id}/capture", write(http.HandlerFunc(h.captureHold)))
+	api.Handle("POST /v1/holds/{id}/release", write(http.HandlerFunc(h.releaseHold)))
 
 	// Reports.
-	api.HandleFunc("GET /v1/trial-balance", h.trialBalance)
-	api.HandleFunc("GET /v1/statements", h.statement)
-	api.HandleFunc("GET /v1/provider-positions", h.providerPositions)
+	api.Handle("GET /v1/trial-balance", read(http.HandlerFunc(h.trialBalance)))
+	api.Handle("GET /v1/statements", read(http.HandlerFunc(h.statement)))
+	api.Handle("GET /v1/provider-positions", read(http.HandlerFunc(h.providerPositions)))
+
+	auth := ident.RequireAuthConfig(ident.AuthConfig{
+		JWKSURL:          jwksURL,
+		AuthDisabled:     authDisabled,
+		ExpectedIssuer:   ident.DefaultIssuer,
+		ExpectedAudience: ident.AudienceLedgerCore,
+	})
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -64,7 +77,7 @@ func NewRouter(svc *app.Service, dbPing func(context.Context) error, jwksURL str
 		}
 		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	root.Handle("/v1/", ident.RequireAuth(jwksURL, authDisabled)(api))
+	root.Handle("/v1/", auth(api))
 
 	var handler http.Handler = root
 	// CORS must wrap the auth middleware: browser preflights (OPTIONS) carry

@@ -54,7 +54,7 @@ type Store interface {
 	GetTransaction(ctx context.Context, tenantID, id uuid.UUID) (domain.Transaction, error)
 	ListTransactions(ctx context.Context, tenantID uuid.UUID, filter TransactionFilter, page Page) ([]domain.Transaction, error)
 	PostTransaction(ctx context.Context, tenantID, id uuid.UUID, now time.Time) (domain.Transaction, error)
-	ReverseTransaction(ctx context.Context, tenantID, id uuid.UUID, idempotencyKey, reason string, now time.Time) (domain.Transaction, error)
+	ReverseTransaction(ctx context.Context, tenantID, id uuid.UUID, idempotencyKey, reason string, now time.Time) (domain.Transaction, bool, error)
 
 	// CreateHold reserves funds. The bool result is true on idempotent replay.
 	CreateHold(ctx context.Context, h domain.Hold) (domain.Hold, bool, error)

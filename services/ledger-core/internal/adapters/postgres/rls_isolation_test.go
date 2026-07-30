@@ -116,7 +116,7 @@ func TestRLSCrossTenantIsolation(t *testing.T) {
 		}
 
 		// Lifecycle operations on A's transaction and hold.
-		if _, err := store.ReverseTransaction(ctx, intruder, tx.ID, "rls-rev-"+uuid.NewString(), "intrusion", now); !errors.Is(err, app.ErrNotFound) {
+		if _, _, err := store.ReverseTransaction(ctx, intruder, tx.ID, "rls-rev-"+uuid.NewString(), "intrusion", now); !errors.Is(err, app.ErrNotFound) {
 			t.Errorf("ReverseTransaction of foreign tx: want ErrNotFound, got %v", err)
 		}
 		if _, err := store.ReleaseHold(ctx, intruder, hold.ID, now); !errors.Is(err, app.ErrNotFound) {

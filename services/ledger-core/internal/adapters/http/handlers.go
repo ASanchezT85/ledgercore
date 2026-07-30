@@ -494,7 +494,11 @@ func (h *handler) reverseTransaction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	t, err := h.svc.ReverseTransaction(r.Context(), tenantID, id, app.ReverseTransactionInput{
+	if req.IdempotencyKey == "" {
+		// The Idempotency-Key header is an accepted alternative to the body field.
+		req.IdempotencyKey = r.Header.Get("Idempotency-Key")
+	}
+	t, replayed, err := h.svc.ReverseTransaction(r.Context(), tenantID, id, app.ReverseTransactionInput{
 		IdempotencyKey: req.IdempotencyKey,
 		Reason:         req.Reason,
 	})
@@ -502,7 +506,12 @@ func (h *handler) reverseTransaction(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, newTransactionView(t))
+	status := http.StatusCreated
+	if replayed {
+		w.Header().Set(idempotencyReplayHeader, "true")
+		status = http.StatusOK
+	}
+	httpx.WriteJSON(w, status, newTransactionView(t))
 }
 
 // ---- holds --------------------------------------------------------------------

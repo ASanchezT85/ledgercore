@@ -220,6 +220,7 @@ func (s *Service) CreateTransaction(ctx context.Context, tenantID uuid.UUID, in 
 	}
 	if in.EffectiveAt != nil {
 		t.EffectiveAt = in.EffectiveAt.UTC()
+		t.EffectiveAtProvided = true
 	}
 	if status == domain.TransactionPosted {
 		postedAt := now
@@ -256,8 +257,15 @@ func (s *Service) ListTransactions(ctx context.Context, tenantID uuid.UUID, filt
 }
 
 // PostTransaction transitions a draft to posted, applying balances and
-// emitting ledger.transaction.posted. Posting an already-posted transaction
-// is a no-op that returns it unchanged.
+// emitting ledger.transaction.posted.
+//
+// R-008 note — naturally idempotent by design: post carries no request payload
+// beyond the transaction id, and the operation is a pure state-machine
+// transition (draft->posted). Re-posting an already-posted transaction is a
+// no-op that returns it unchanged (see the store), so a retry can never
+// double-apply balances or emit a duplicate event. There is therefore no
+// idempotency key or request fingerprint to store: the transaction row itself
+// is the idempotency record.
 func (s *Service) PostTransaction(ctx context.Context, tenantID, id uuid.UUID) (domain.Transaction, error) {
 	return s.store.PostTransaction(ctx, tenantID, id, s.now())
 }
@@ -269,13 +277,15 @@ type ReverseTransactionInput struct {
 }
 
 // ReverseTransaction creates and posts the mirror transaction, marks the
-// original as reversed and emits ledger.transaction.reversed.
-func (s *Service) ReverseTransaction(ctx context.Context, tenantID, id uuid.UUID, in ReverseTransactionInput) (domain.Transaction, error) {
+// original as reversed and emits ledger.transaction.reversed. It is idempotent
+// by reversal idempotency key (R-008); the bool result reports an idempotent
+// replay.
+func (s *Service) ReverseTransaction(ctx context.Context, tenantID, id uuid.UUID, in ReverseTransactionInput) (domain.Transaction, bool, error) {
 	if len(in.IdempotencyKey) > 255 {
-		return domain.Transaction{}, fmt.Errorf("%w: idempotency_key must be at most 255 characters", ErrValidation)
+		return domain.Transaction{}, false, fmt.Errorf("%w: idempotency_key must be at most 255 characters", ErrValidation)
 	}
 	if len(in.Reason) > 1024 {
-		return domain.Transaction{}, fmt.Errorf("%w: reason must be at most 1024 characters", ErrValidation)
+		return domain.Transaction{}, false, fmt.Errorf("%w: reason must be at most 1024 characters", ErrValidation)
 	}
 	return s.store.ReverseTransaction(ctx, tenantID, id, in.IdempotencyKey, in.Reason, s.now())
 }
@@ -310,8 +320,10 @@ func (s *Service) CreateHold(ctx context.Context, tenantID uuid.UUID, in CreateH
 	}
 	now := s.now()
 	expiresAt := now.Add(DefaultHoldTTL)
+	expiresAtProvided := false
 	if in.ExpiresAt != nil {
 		expiresAt = in.ExpiresAt.UTC()
+		expiresAtProvided = true
 		if !expiresAt.After(now) {
 			return domain.Hold{}, false, fmt.Errorf("%w: expires_at must be in the future", ErrValidation)
 		}
@@ -327,10 +339,11 @@ func (s *Service) CreateHold(ctx context.Context, tenantID uuid.UUID, in CreateH
 		AccountID:      in.AccountID,
 		IdempotencyKey: in.IdempotencyKey,
 		Amount:         in.Amount,
-		Status:         domain.HoldActive,
-		ExpiresAt:      expiresAt,
-		Metadata:       in.Metadata,
-		CreatedAt:      now,
+		Status:            domain.HoldActive,
+		ExpiresAt:         expiresAt,
+		ExpiresAtProvided: expiresAtProvided,
+		Metadata:          in.Metadata,
+		CreatedAt:         now,
 	}
 	return s.store.CreateHold(ctx, h)
 }
@@ -344,6 +357,17 @@ type CaptureHoldInput struct {
 // CaptureHold finalizes a hold: the held funds are freed and the hold is
 // marked captured, optionally linked to the posted transaction that moved the
 // money. A partial capture releases the remainder.
+//
+// R-008 note — idempotent by the hold state machine, not by a request
+// fingerprint. A hold transitions active->captured (or active->released) at
+// most once; the store takes FOR UPDATE on the row and rejects any capture or
+// release of a non-active hold with ErrInvalidState (surfaced as 409). A
+// retried capture therefore can never free the held funds twice or emit a
+// duplicate event. Because the hold row's terminal status is itself the
+// idempotency record, capture/release deliberately do NOT take a separate
+// Idempotency-Key/request_hash: adding one would duplicate a guarantee the
+// state machine already provides. (CreateHold, which CAN be replayed with an
+// identical request, does carry a fingerprint — see the store.)
 func (s *Service) CaptureHold(ctx context.Context, tenantID, id uuid.UUID, in CaptureHoldInput) (domain.Hold, error) {
 	if in.Amount != nil {
 		if err := money.ValidateAssetCode(in.Amount.Asset); err != nil {

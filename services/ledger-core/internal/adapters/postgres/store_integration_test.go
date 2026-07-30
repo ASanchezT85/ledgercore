@@ -28,6 +28,12 @@ func newTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	if url == "" {
 		t.Skip("LEDGERCORE_TEST_DATABASE_URL is not set; skipping integration test")
 	}
+	// When TestMain provisioned the real role model, migrations already ran as
+	// the migrator and `url` points at the (DDL-less) runtime role; migrating
+	// again would fail. Just open the runtime pool.
+	if roleModelProvisioned {
+		return runtimeStorePool(t, url)
+	}
 	ctx := context.Background()
 	pool, err := pgxutil.NewPool(ctx, url, "ledger")
 	if err != nil {
@@ -240,9 +246,12 @@ func TestReverseTransaction(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	rev, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, "", "chargeback", time.Now().UTC())
+	rev, replayed, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, "", "chargeback", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("reverse: %v", err)
+	}
+	if replayed {
+		t.Fatal("first reverse must not be a replay")
 	}
 	if rev.ReversesID == nil || *rev.ReversesID != tx.ID {
 		t.Errorf("reversal must link the original")
@@ -273,9 +282,16 @@ func TestReverseTransaction(t *testing.T) {
 		t.Errorf("outbox reversed events = %d, want 1", n)
 	}
 
-	// Double reversal must fail with invalid state.
-	if _, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, "", "", time.Now().UTC()); !errors.Is(err, app.ErrInvalidState) {
-		t.Errorf("second reverse = %v, want ErrInvalidState", err)
+	// Retrying the SAME reversal (same default key + same reason) replays the
+	// stored reversal rather than erroring (R-008 reverse idempotency).
+	if again, replayed, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, "", "chargeback", time.Now().UTC()); err != nil || !replayed || again.ID != rev.ID {
+		t.Errorf("same-reversal retry = (%v, replayed=%v, %v), want original id and replayed=true", again.ID, replayed, err)
+	}
+
+	// A reversal under a DIFFERENT key bypasses idempotency and hits the
+	// already-reversed guard: invalid state.
+	if _, _, err := s.ReverseTransaction(ctx, f.tenantID, tx.ID, "second-reverse-"+uuid.NewString(), "", time.Now().UTC()); !errors.Is(err, app.ErrInvalidState) {
+		t.Errorf("second reverse under a new key = %v, want ErrInvalidState", err)
 	}
 
 	// The trial balance stays balanced after the full cycle.

@@ -164,7 +164,7 @@ func TestTrialBalanceAsOfReconstructsHistory(t *testing.T) {
 
 	// Reverse tx1 today: a historical as_of BEFORE the reversal must still
 	// count the original postings (status 'reversed' means it WAS posted).
-	if _, err := s.ReverseTransaction(ctx, f.tenantID, mustTxID(t, s, f, "asof-1"), "", "undo", time.Now().UTC()); err != nil {
+	if _, _, err := s.ReverseTransaction(ctx, f.tenantID, mustTxID(t, s, f, "asof-1"), "", "undo", time.Now().UTC()); err != nil {
 		t.Fatalf("reverse tx1: %v", err)
 	}
 	histor, err := s.TrialBalance(ctx, f.tenantID, f.ledger.ID, &asOf)

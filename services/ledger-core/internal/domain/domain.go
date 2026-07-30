@@ -135,7 +135,13 @@ type Transaction struct {
 	IdempotencyKey string            `json:"idempotency_key"`
 	Status         TransactionStatus `json:"status"`
 	EffectiveAt    time.Time         `json:"effective_at"`
-	PostedAt       *time.Time        `json:"posted_at,omitempty"`
+	// EffectiveAtProvided records whether the client explicitly supplied
+	// effective_at in the request (vs. it being defaulted server-side). It is
+	// part of the idempotency fingerprint (R-008): reusing a key with a
+	// different — or newly present/absent — effective_at is a conflict, not a
+	// silent replay. Not persisted to the wire (json:"-").
+	EffectiveAtProvided bool              `json:"-"`
+	PostedAt            *time.Time        `json:"posted_at,omitempty"`
 	ReversedByID   *uuid.UUID        `json:"reversed_by,omitempty"` // set on the original when reversed
 	ReversesID     *uuid.UUID        `json:"reverses,omitempty"`    // set on the reversal, points at the original
 	Metadata       map[string]string `json:"metadata,omitempty"`
@@ -164,6 +170,10 @@ type Hold struct {
 	Amount                money.Amount      `json:"amount"`
 	Status                HoldStatus        `json:"status"`
 	ExpiresAt             time.Time         `json:"expires_at"`
+	// ExpiresAtProvided records whether the client explicitly supplied
+	// expires_at (vs. the default TTL). Part of the idempotency fingerprint
+	// (R-008); not persisted to the wire (json:"-").
+	ExpiresAtProvided bool `json:"-"`
 	CapturedTransactionID *uuid.UUID        `json:"captured_transaction_id,omitempty"`
 	Metadata              map[string]string `json:"metadata,omitempty"`
 	CreatedAt             time.Time         `json:"created_at"`

@@ -220,19 +220,14 @@ func (r *Repo) RotateSecret(ctx context.Context, tenantID, id uuid.UUID, secret 
 }
 
 // PurgeExpiredPreviousSecrets clears previous secrets whose grace window has
-// passed, across all tenants (system transaction). Returns the rows cleaned.
+// passed, across all tenants. The cross-tenant write goes through the
+// sanctioned SECURITY DEFINER function purge_expired_previous_secrets() (owned
+// by ledgercore_maint) rather than a direct UPDATE under a permissive policy
+// (R-004). Returns the rows cleaned.
 func (r *Repo) PurgeExpiredPreviousSecrets(ctx context.Context) (int64, error) {
 	var n int64
 	err := pgxutil.WithSystemTx(ctx, r.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `
-			UPDATE subscriptions
-			SET previous_secret = NULL, previous_secret_expires_at = NULL
-			WHERE previous_secret IS NOT NULL AND previous_secret_expires_at <= now()`)
-		if err != nil {
-			return err
-		}
-		n = tag.RowsAffected()
-		return nil
+		return tx.QueryRow(ctx, "SELECT purge_expired_previous_secrets()").Scan(&n)
 	})
 	if err != nil {
 		return 0, fmt.Errorf("postgres: purge expired previous secrets: %w", err)
@@ -251,10 +246,10 @@ func (r *Repo) ReencryptPlaintextSecrets(ctx context.Context) (int64, error) {
 	}
 	var n int64
 	err := pgxutil.WithSystemTx(ctx, r.pool, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `
-			SELECT id, secret, previous_secret FROM subscriptions
-			WHERE secret NOT LIKE 'enc:v1:%'
-			   OR (previous_secret IS NOT NULL AND previous_secret NOT LIKE 'enc:v1:%')`)
+		// The cross-tenant read and per-row write-back both go through the
+		// sanctioned SECURITY DEFINER functions (owned by ledgercore_maint), so
+		// no permissive cross-tenant policy is required (R-004).
+		rows, err := tx.Query(ctx, "SELECT id, secret, previous_secret FROM list_plaintext_secrets()")
 		if err != nil {
 			return err
 		}
@@ -293,13 +288,10 @@ func (r *Repo) ReencryptPlaintextSecrets(ctx context.Context) (int64, error) {
 				}
 				encPrev = &v
 			}
-			tag, err := tx.Exec(ctx,
-				"UPDATE subscriptions SET secret = $1, previous_secret = $2 WHERE id = $3",
-				encSecret, encPrev, p.id)
-			if err != nil {
+			if _, err := tx.Exec(ctx, "SELECT set_encrypted_secret($1, $2, $3)", p.id, encSecret, encPrev); err != nil {
 				return err
 			}
-			n += tag.RowsAffected()
+			n++
 		}
 		return nil
 	})
@@ -421,24 +413,17 @@ func (r *Repo) Requeue(ctx context.Context, tenantID, id uuid.UUID) (domain.Deli
 
 // ---- dispatcher.Store -----------------------------------------------------------------
 
-// ClaimDue leases up to `limit` due deliveries for the dispatcher. Rows are
-// locked with FOR UPDATE SKIP LOCKED and their next_attempt_at is pushed
-// `lease` into the future, so a crashed worker's claims resurface on their
-// own. Runs as a system transaction because the scan spans all tenants.
+// ClaimDue leases up to `limit` due deliveries for the dispatcher. The claim
+// spans all tenants, so instead of a direct cross-tenant SELECT + UPDATE (which
+// used to depend on the permissive system_drain policy) it calls the sanctioned
+// SECURITY DEFINER function claim_due_deliveries (owned by ledgercore_maint):
+// the function locks the rows FOR UPDATE SKIP LOCKED, pushes their
+// next_attempt_at `lease` into the future so a crashed worker's claims
+// resurface, and returns them joined with the endpoint data (R-004).
 func (r *Repo) ClaimDue(ctx context.Context, limit int, lease time.Duration) ([]domain.ClaimedDelivery, error) {
 	var out []domain.ClaimedDelivery
 	err := pgxutil.WithSystemTx(ctx, r.pool, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `
-			SELECT d.id, d.tenant_id, d.subscription_id, d.event_id, d.event_type, d.payload, d.attempts, s.url, s.secret,
-				       s.previous_secret, s.previous_secret_expires_at
-			FROM deliveries d
-			JOIN subscriptions s ON s.id = d.subscription_id
-			WHERE d.status IN ('pending', 'failed')
-			  AND d.next_attempt_at <= now()
-			  AND s.active
-			ORDER BY d.next_attempt_at
-			LIMIT $1
-			FOR UPDATE OF d SKIP LOCKED`, limit)
+		rows, err := tx.Query(ctx, "SELECT * FROM claim_due_deliveries($1, $2)", limit, lease.Seconds())
 		if err != nil {
 			return err
 		}
@@ -464,20 +449,7 @@ func (r *Repo) ClaimDue(ctx context.Context, limit int, lease time.Duration) ([]
 			}
 			out = append(out, c)
 		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		if len(out) == 0 {
-			return nil
-		}
-		ids := make([]uuid.UUID, len(out))
-		for i, c := range out {
-			ids[i] = c.ID
-		}
-		_, err = tx.Exec(ctx,
-			"UPDATE deliveries SET next_attempt_at = now() + make_interval(secs => $1) WHERE id = ANY($2)",
-			lease.Seconds(), ids)
-		return err
+		return rows.Err()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("postgres: claim due deliveries: %w", err)
