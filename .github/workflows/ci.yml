@@ -209,21 +209,16 @@ jobs:
         with:
           node-version: '22'
 
-      # ADVISORY for now (continue-on-error): the current specs have defects
-      # that must be fixed by the contracts owner before this can gate merges —
-      # ledger.v1.yaml / webhooks.v1.yaml crash spectral on a null enum,
-      # reconciliation.v1.yaml has a duplicate `parameters` key + a path-params
-      # mismatch, and identity.v1.yaml / webhooks.v1.yaml reference
-      # components.parameters (PageLimit / PageCursor) that are only defined in
-      # reconciliation.v1.yaml. Once those are fixed, drop continue-on-error so
-      # a lint failure blocks the PR.
-      - name: Lint OpenAPI (spectral) [advisory]
-        continue-on-error: true
+      # BLOCKING: validates structure, dangling $refs and invalid schemas.
+      # Uses Redocly rather than Spectral: Spectral 6's JSONPath engine (nimma)
+      # crashes on valid OpenAPI 3.1 documents that carry null example values
+      # (e.g. next_cursor: null on the last page). Redocly validates the same
+      # defects LC-010 cares about without that crash. A lint error blocks.
+      - name: Lint OpenAPI (redocly)
         run: |
-          npx --yes @stoplight/spectral-cli@6 lint \
-            --ruleset .github/spectral.yaml \
-            --fail-severity=error \
-            contracts/openapi/*.yaml
+          for f in contracts/openapi/*.yaml; do
+            npx --yes @redocly/cli@1 lint "$f" --format=stylish
+          done
 
       - name: Fail on contract/console drift
         run: |
