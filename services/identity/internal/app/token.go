@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/ledgercore/ledgercore/libs/go/ident"
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
 )
 
@@ -33,13 +34,17 @@ type tokenClaims struct {
 
 // TokenIssuer signs EdDSA JWTs with the active signing key.
 type TokenIssuer struct {
-	kid string
-	key ed25519.PrivateKey
-	ttl time.Duration
-	now func() time.Time
+	kid       string
+	key       ed25519.PrivateKey
+	ttl       time.Duration
+	audiences []string
+	now       func() time.Time
 }
 
-// NewTokenIssuer builds an issuer from a persisted signing key.
+// NewTokenIssuer builds an issuer from a persisted signing key. Tokens carry
+// the platform issuer (ident.DefaultIssuer) and every service audience
+// (ident.DefaultAudiences) so that each service can validate that its own
+// audience is present (LC-013).
 func NewTokenIssuer(key domain.SigningKey, ttl time.Duration) (*TokenIssuer, error) {
 	if key.Algorithm != domain.AlgorithmEdDSA {
 		return nil, fmt.Errorf("app: unsupported signing algorithm %q", key.Algorithm)
@@ -49,10 +54,11 @@ func NewTokenIssuer(key domain.SigningKey, ttl time.Duration) (*TokenIssuer, err
 		return nil, err
 	}
 	return &TokenIssuer{
-		kid: key.Kid.String(),
-		key: priv,
-		ttl: ttl,
-		now: func() time.Time { return time.Now().UTC() },
+		kid:       key.Kid.String(),
+		key:       priv,
+		ttl:       ttl,
+		audiences: ident.DefaultAudiences(),
+		now:       func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
@@ -65,7 +71,8 @@ func (i *TokenIssuer) Issue(apiKeyID, tenantID uuid.UUID, environment string, sc
 		Scopes:      scopes,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "api_key:" + apiKeyID.String(),
-			Issuer:    "ledgercore-identity",
+			Issuer:    ident.DefaultIssuer,
+			Audience:  jwt.ClaimStrings(i.audiences),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(i.ttl)),
 			ID:        uuid.NewString(),

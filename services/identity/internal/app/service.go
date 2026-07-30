@@ -15,12 +15,54 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ledgercore/ledgercore/libs/go/httpx"
+	"github.com/ledgercore/ledgercore/libs/go/ident"
 	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
 	"github.com/ledgercore/ledgercore/services/identity/internal/keycrypt"
 )
 
-// DefaultScopes are the scopes granted to every token issued from an API key.
-var DefaultScopes = []string{"ledger:read", "ledger:write"}
+// DefaultScopes are the scopes granted when an API key is created without an
+// explicit scope list (and to legacy keys stored before scoped issuance).
+// They cover read+write on every service so existing integrations keep
+// working; callers wanting least privilege pass a narrower list at creation.
+var DefaultScopes = []string{
+	ident.ScopeLedgerRead, ident.ScopeLedgerWrite,
+	ident.ScopeReconRead, ident.ScopeReconWrite,
+	ident.ScopeWebhooksRead, ident.ScopeWebhooksWrite,
+}
+
+// AllowedScopes is the closed set an API key may be minted with. The wildcard
+// is deliberately excluded — it exists only for dev auth-disabled mode.
+var AllowedScopes = map[string]bool{
+	ident.ScopeLedgerRead:    true,
+	ident.ScopeLedgerWrite:   true,
+	ident.ScopeReconRead:     true,
+	ident.ScopeReconWrite:    true,
+	ident.ScopeWebhooksRead:  true,
+	ident.ScopeWebhooksWrite: true,
+}
+
+// normalizeScopes validates a requested scope list against AllowedScopes and
+// de-duplicates it. An empty request yields DefaultScopes.
+func normalizeScopes(requested []string) ([]string, error) {
+	if len(requested) == 0 {
+		out := make([]string, len(DefaultScopes))
+		copy(out, DefaultScopes)
+		return out, nil
+	}
+	seen := make(map[string]bool, len(requested))
+	out := make([]string, 0, len(requested))
+	for _, s := range requested {
+		s = strings.TrimSpace(s)
+		if !AllowedScopes[s] {
+			return nil, ValidationError{Msg: fmt.Sprintf("unknown or forbidden scope %q; allowed: ledger:read, ledger:write, reconciliation:read, reconciliation:write, webhooks:read, webhooks:write", s)}
+		}
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
 
 // TokenTTL is the lifetime of issued access tokens.
 const TokenTTL = 15 * time.Minute
@@ -201,13 +243,19 @@ func (s *Service) ListTenants(ctx context.Context, limit int, cursor httpx.Curso
 
 // CreateAPIKey mints a new API key for a tenant. The returned string is the
 // plaintext secret, shown exactly once; only its hash and prefix are stored.
-func (s *Service) CreateAPIKey(ctx context.Context, tenantID uuid.UUID, environment, name string) (domain.APIKey, string, error) {
+// scopes bounds what tokens minted from the key may do; an empty list applies
+// DefaultScopes.
+func (s *Service) CreateAPIKey(ctx context.Context, tenantID uuid.UUID, environment, name string, scopes []string) (domain.APIKey, string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 255 {
 		return domain.APIKey{}, "", ValidationError{Msg: "name is required and must be at most 255 characters"}
 	}
 	if !domain.ValidEnvironment(environment) {
 		return domain.APIKey{}, "", ValidationError{Msg: "environment must be sandbox or live"}
+	}
+	grantedScopes, err := normalizeScopes(scopes)
+	if err != nil {
+		return domain.APIKey{}, "", err
 	}
 	if _, err := s.tenants.GetTenant(ctx, tenantID); err != nil {
 		return domain.APIKey{}, "", err // domain.ErrNotFound -> 404 at the edge
@@ -227,6 +275,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, tenantID uuid.UUID, environm
 		Name:        name,
 		KeyPrefix:   domain.PrefixOf(secret),
 		SecretHash:  domain.HashSecret(secret),
+		Scopes:      grantedScopes,
 		CreatedAt:   s.now(),
 	}
 	if err := s.keys.CreateAPIKey(ctx, key); err != nil {
@@ -283,7 +332,13 @@ func (s *Service) IssueToken(ctx context.Context, secret string) (IssuedToken, e
 		slog.Info("token denied: tenant not active", "tenant_id", tenant.ID, "status", tenant.Status)
 		return IssuedToken{}, ErrInvalidCredentials
 	}
-	return s.issuer.Issue(match.ID, tenant.ID, match.Environment, DefaultScopes)
+	// Mint the token with the key's own scopes. Legacy keys stored before
+	// scoped issuance carry none; fall back to DefaultScopes for them.
+	scopes := match.Scopes
+	if len(scopes) == 0 {
+		scopes = DefaultScopes
+	}
+	return s.issuer.Issue(match.ID, tenant.ID, match.Environment, scopes)
 }
 
 // slugify derives a URL-safe slug from a display name: lowercase

@@ -304,6 +304,23 @@ components:
       schema:
         type: string
         format: uuid
+    PageLimit:
+      name: limit
+      in: query
+      description: Page size; values above 200 are clamped to 200.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    PageCursor:
+      name: cursor
+      in: query
+      description: |
+        Opaque keyset cursor from a previous page's next_cursor. A malformed
+        cursor yields 400 invalid_cursor.
+      schema:
+        type: string
 
   responses:
     BadRequest:

@@ -49,7 +49,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 
 func TestRepoEndToEnd(t *testing.T) {
 	pool := testPool(t)
-	repo := NewRepo(pool)
+	repo := NewRepo(pool, nil)
 	ctx := context.Background()
 	tenantID := uuid.New()
 

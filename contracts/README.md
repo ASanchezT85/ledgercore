@@ -43,6 +43,10 @@ contracts/
 - **Stubs 501**: los endpoints declarados pero aún no implementados (fase 1.5) responden `501 not_implemented` y están marcados en cada spec (`/v1/statements`, `/v1/provider-positions`; el `as_of` del trial balance se acepta pero se ignora).
 - **Health**: cada servicio expone `GET /healthz` y `GET /readyz` fuera de auth; son operacionales y quedan fuera de los contratos.
 
-## Generación de SDKs
+## Relación con los SDKs
 
-Los SDK oficiales (TypeScript, Go, etc.) **se generan desde estos OpenAPI**; no se escriben a mano. Cualquier cambio de contrato pasa por PR sobre este directorio, se revisa aquí, y recién después se regeneran clientes y stubs de servidor. Si el código y el contrato divergen, el contrato manda.
+Estos OpenAPI son la **única fuente de verdad** de las interfaces. Los SDK oficiales (TypeScript y PHP, en `sdks/`) están **escritos a mano** y se mantienen fieles a estos contratos — **no se generan** con un generador de código. La decisión es deliberada: clientes pequeños, sin dependencias y con ergonomía cuidada (dinero como enteros, idempotencia, verificación de webhooks) que un generador no produce bien.
+
+Flujo de cambios: cualquier cambio de contrato pasa por PR sobre este directorio y se revisa aquí primero; después se actualizan a mano los SDK y los stubs de servidor para reflejarlo. Si el código y el contrato divergen, **el contrato manda**.
+
+Anti-drift: la copia empaquetada de los specs en `apps/console/public/openapi/` debe coincidir byte a byte con la de este directorio; el job `openapi lint + anti-drift` de CI (`.github/workflows/ci.yml`) falla el PR si divergen o si un spec falla el lint de Spectral.

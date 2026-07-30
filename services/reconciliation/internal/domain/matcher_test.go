@@ -70,18 +70,52 @@ func TestMatchNaiveAssetMismatchIsAmountMismatch(t *testing.T) {
 	}
 }
 
-func TestMatchNaiveEntryConsumedOnlyOnce(t *testing.T) {
+func TestMatchNaiveDuplicateRefFlagged(t *testing.T) {
+	// LC-011: a repeated external_ref in one batch is a duplicate hazard. The
+	// first row matches the single entry; the second is flagged KindDuplicate
+	// (not silently matched, not counted as missing_internal).
 	e1 := ext("dup-ref", 1050, "USD")
 	e2 := ext("dup-ref", 1050, "USD")
 	m := entry("dup-ref", 1050, "USD")
 
 	res := MatchNaive([]ExternalTransaction{e1, e2}, []MirrorEntry{m})
 
-	if len(res.Matches) != 1 {
-		t.Fatalf("expected exactly 1 match (entry consumed once), got %d", len(res.Matches))
+	if len(res.Matches) != 1 || res.Matches[0].ExternalID != e1.ID {
+		t.Fatalf("expected the first external to match, got %+v", res.Matches)
 	}
-	if len(res.Findings) != 1 || res.Findings[0].Kind != KindMissingInternal {
-		t.Fatalf("second external must be missing_internal after consumption, got %+v", res.Findings)
+	if len(res.Findings) != 1 || res.Findings[0].Kind != KindDuplicate {
+		t.Fatalf("second external must be flagged duplicate, got %+v", res.Findings)
+	}
+	if res.Findings[0].External.ID != e2.ID {
+		t.Errorf("duplicate finding should carry the second external, got %+v", res.Findings[0])
+	}
+}
+
+func TestMatchNaiveDirection(t *testing.T) {
+	// entry() builds a DEBIT mirror entry.
+	m := entry("dir-1", 1050, "USD")
+
+	// A CREDIT external with the same ref/amount/asset must NOT match a DEBIT
+	// mirror entry; it becomes an amount_mismatch (closest candidate).
+	credit := ExternalTransaction{ID: uuid.New(), ExternalRef: "dir-1", Amount: 1050, Asset: "USD", Direction: DirectionCredit}
+	res := MatchNaive([]ExternalTransaction{credit}, []MirrorEntry{m})
+	if len(res.Matches) != 0 || len(res.Findings) != 1 || res.Findings[0].Kind != KindAmountMismatch {
+		t.Fatalf("opposite direction must not match, got %+v", res)
+	}
+
+	// A DEBIT external matches the DEBIT entry.
+	debit := ExternalTransaction{ID: uuid.New(), ExternalRef: "dir-1", Amount: 1050, Asset: "USD", Direction: DirectionDebit}
+	res = MatchNaive([]ExternalTransaction{debit}, []MirrorEntry{entry("dir-1", 1050, "USD")})
+	if len(res.Matches) != 1 {
+		t.Fatalf("same direction must match, got %+v", res)
+	}
+
+	// A blank direction (statement without the column) matches either side —
+	// v1 compatibility.
+	blank := ext("dir-1", 1050, "USD")
+	res = MatchNaive([]ExternalTransaction{blank}, []MirrorEntry{entry("dir-1", 1050, "USD")})
+	if len(res.Matches) != 1 {
+		t.Fatalf("blank direction must still match, got %+v", res)
 	}
 }
 

@@ -118,7 +118,7 @@ func (s *Service) ImportStatement(ctx context.Context, tenantID, sourceID uuid.U
 		filename = "statement.csv"
 	}
 
-	rows, parseErr := domain.ParseStatementCSV(csvBody, domain.DefaultCSVExponent)
+	rows, parseErr := domain.ParseStatementCSV(csvBody, domain.DefaultAssetExponent)
 
 	imp := domain.Import{
 		ID:        newID(),
@@ -153,6 +153,7 @@ func (s *Service) ImportStatement(ctx context.Context, tenantID, sourceID uuid.U
 				ExternalRef: row.ExternalRef,
 				Amount:      row.AmountUnits,
 				Asset:       row.Asset,
+				Direction:   row.Direction,
 				OccurredAt:  row.OccurredAt,
 				Raw:         row.Raw,
 				MatchStatus: domain.MatchUnmatched,
@@ -207,7 +208,9 @@ func (s *Service) StartRun(ctx context.Context, tenantID, sourceID uuid.UUID) (d
 			}
 		}
 		for _, f := range result.Findings {
-			if f.Kind == domain.KindAmountMismatch {
+			// amount_mismatch and duplicate rows are actively disputed so they
+			// are not silently reconciled later.
+			if f.Kind == domain.KindAmountMismatch || f.Kind == domain.KindDuplicate {
 				if err := tx.MarkExternalDisputed(ctx, f.External.ID); err != nil {
 					return err
 				}
@@ -215,6 +218,12 @@ func (s *Service) StartRun(ctx context.Context, tenantID, sourceID uuid.UUID) (d
 			disc := discrepancyFromFinding(run, f)
 			if err := tx.InsertDiscrepancy(ctx, disc); err != nil {
 				return err
+			}
+			// Only emit an event for kinds the discrepancy contract defines.
+			// KindDuplicate has no wire mapping yet (v2), so it is persisted
+			// for triage but not published — never dropped, never an error.
+			if _, ok := eventKind(f.Kind); !ok {
+				continue
 			}
 			env, err := discrepancyEnvelope(run, disc, f)
 			if err != nil {

@@ -74,4 +74,8 @@ type Store interface {
 	// ProviderAccountBalances returns the account/asset aggregates of every
 	// asset- or liability-type account, read from account_balances.
 	ProviderAccountBalances(ctx context.Context, tenantID uuid.UUID) ([]domain.ProviderAccountBalance, error)
+
+	// VerifyBalances recomputes balances from postings and returns the rows
+	// where the derived account_balances table drifts from that source.
+	VerifyBalances(ctx context.Context, tenantID, ledgerID uuid.UUID) ([]domain.BalanceDiscrepancy, error)
 }

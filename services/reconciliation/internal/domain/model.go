@@ -121,18 +121,29 @@ type Import struct {
 // ExternalTransaction is one row of an imported statement, normalized to
 // integer minor units (never floats).
 type ExternalTransaction struct {
-	ID             uuid.UUID
-	TenantID       uuid.UUID
-	ImportID       uuid.UUID
-	SourceID       uuid.UUID
-	ExternalRef    string
-	Amount         int64 // minor units
-	Asset          string
+	ID          uuid.UUID
+	TenantID    uuid.UUID
+	ImportID    uuid.UUID
+	SourceID    uuid.UUID
+	ExternalRef string
+	Amount      int64 // minor units
+	Asset       string
+	// Direction is DEBIT/CREDIT when the statement declares it (optional CSV
+	// column), or "" when it does not. An empty direction matches either side
+	// (preserves v1 behavior); a declared direction must equal the mirror
+	// entry's posting direction to match (LC-011).
+	Direction      string
 	OccurredAt     time.Time
 	Raw            map[string]string // original CSV values, stored as JSONB
 	MatchStatus    MatchStatus
 	MatchedEntryID *uuid.UUID
 }
+
+// Posting directions shared by mirror entries and (optionally) external rows.
+const (
+	DirectionDebit  = "DEBIT"
+	DirectionCredit = "CREDIT"
+)
 
 // MirrorEntry is a local copy of one ledger posting, fed exclusively by
 // ledger.transaction.posted events (event-carried state transfer). This

@@ -116,6 +116,8 @@ func (s *SandboxService) Signup(ctx context.Context, email, companyName string) 
 	if err != nil {
 		return SandboxSignup{}, fmt.Errorf("app: generate api key id: %w", err)
 	}
+	sandboxScopes := make([]string, len(DefaultScopes))
+	copy(sandboxScopes, DefaultScopes)
 	key := domain.APIKey{
 		ID:          keyID,
 		TenantID:    tenantID,
@@ -123,6 +125,7 @@ func (s *SandboxService) Signup(ctx context.Context, email, companyName string) 
 		Name:        "sandbox signup key",
 		KeyPrefix:   domain.PrefixOf(secret),
 		SecretHash:  domain.HashSecret(secret),
+		Scopes:      sandboxScopes,
 		CreatedAt:   now,
 	}
 

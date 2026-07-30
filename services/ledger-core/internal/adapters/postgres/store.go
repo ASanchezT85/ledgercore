@@ -1,7 +1,9 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -516,48 +518,133 @@ func checkAccountsInLedger(ctx context.Context, tx pgx.Tx, ledgerID uuid.UUID, p
 	return nil
 }
 
-func storeIdempotentResponse(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, key string, statusCode int, t domain.Transaction) error {
+// canonicalPosting is a stable, order-independent view of a posting used to
+// fingerprint a transaction request.
+type canonicalPosting struct {
+	AccountID string `json:"account_id"`
+	Direction string `json:"direction"`
+	Asset     string `json:"asset"`
+	Units     int64  `json:"units"`
+}
+
+// transactionFingerprint is the SHA-256 of a canonical JSON of the
+// semantically relevant request fields (LC-006). It excludes server-generated,
+// per-request values (ids, created_at, and the defaulted effective_at) so that
+// two identical requests hash equal, while any meaningful difference — a
+// changed amount, account, direction, reference or metadata — hashes
+// differently. Postings are sorted so ordering is not significant.
+func transactionFingerprint(t domain.Transaction) []byte {
+	ps := make([]canonicalPosting, len(t.Postings))
+	for i, p := range t.Postings {
+		ps[i] = canonicalPosting{
+			AccountID: p.AccountID.String(),
+			Direction: string(p.Direction),
+			Asset:     p.Amount.Asset,
+			Units:     p.Amount.Units,
+		}
+	}
+	sort.Slice(ps, func(i, j int) bool {
+		if ps[i].AccountID != ps[j].AccountID {
+			return ps[i].AccountID < ps[j].AccountID
+		}
+		if ps[i].Direction != ps[j].Direction {
+			return ps[i].Direction < ps[j].Direction
+		}
+		if ps[i].Asset != ps[j].Asset {
+			return ps[i].Asset < ps[j].Asset
+		}
+		return ps[i].Units < ps[j].Units
+	})
+	canon := struct {
+		LedgerID    string             `json:"ledger_id"`
+		Reference   string             `json:"reference"`
+		Description string             `json:"description"`
+		Status      string             `json:"status"`
+		Metadata    map[string]string  `json:"metadata"`
+		Postings    []canonicalPosting `json:"postings"`
+	}{
+		LedgerID:    t.LedgerID.String(),
+		Reference:   t.Reference,
+		Description: t.Description,
+		Status:      string(t.Status),
+		Metadata:    meta(t.Metadata),
+		Postings:    ps,
+	}
+	body, _ := json.Marshal(canon) // struct + sorted map: deterministic, cannot fail.
+	sum := sha256.Sum256(body)
+	return sum[:]
+}
+
+// holdFingerprint is the SHA-256 of the semantically relevant fields of a hold
+// request (LC-006). It excludes the derived ledger_id and the defaulted
+// expires_at so idempotent replays of the same logical request match.
+func holdFingerprint(h domain.Hold) []byte {
+	canon := struct {
+		AccountID string            `json:"account_id"`
+		Asset     string            `json:"asset"`
+		Units     int64             `json:"units"`
+		Metadata  map[string]string `json:"metadata"`
+	}{
+		AccountID: h.AccountID.String(),
+		Asset:     h.Amount.Asset,
+		Units:     h.Amount.Units,
+		Metadata:  meta(h.Metadata),
+	}
+	body, _ := json.Marshal(canon)
+	sum := sha256.Sum256(body)
+	return sum[:]
+}
+
+func storeIdempotentResponse(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, key string, statusCode int, t domain.Transaction, requestHash []byte) error {
 	body, err := json.Marshal(t)
 	if err != nil {
 		return fmt.Errorf("marshal idempotent response: %w", err)
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO idempotency_keys (tenant_id, idempotency_key, status_code, response)
-		VALUES ($1, $2, $3, $4)`, tenantID, key, statusCode, body)
+		INSERT INTO idempotency_keys (tenant_id, idempotency_key, status_code, response, request_hash)
+		VALUES ($1, $2, $3, $4, $5)`, tenantID, key, statusCode, body, requestHash)
 	return err
 }
 
-// lookupIdempotent returns the stored transaction for a key, if any.
-func lookupIdempotentTx(ctx context.Context, tx pgx.Tx, key string) (domain.Transaction, bool, error) {
+// lookupIdempotentTx returns the stored transaction and its request fingerprint
+// for a key, if any. The hash is nil for rows written before migration 0004.
+func lookupIdempotentTx(ctx context.Context, tx pgx.Tx, key string) (domain.Transaction, []byte, bool, error) {
 	var raw []byte
+	var hash []byte
 	err := tx.QueryRow(ctx,
-		`SELECT response FROM idempotency_keys WHERE idempotency_key = $1`, key).Scan(&raw)
+		`SELECT response, request_hash FROM idempotency_keys WHERE idempotency_key = $1`, key).Scan(&raw, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Transaction{}, false, nil
+		return domain.Transaction{}, nil, false, nil
 	}
 	if err != nil {
-		return domain.Transaction{}, false, err
+		return domain.Transaction{}, nil, false, err
 	}
 	var t domain.Transaction
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return domain.Transaction{}, false, fmt.Errorf("unmarshal stored response: %w", err)
+		return domain.Transaction{}, nil, false, fmt.Errorf("unmarshal stored response: %w", err)
 	}
-	return t, true, nil
+	return t, hash, true, nil
 }
 
 // CreateTransaction persists the transaction atomically: idempotency check,
 // domain rows, balance application, outbox event and idempotency record all
 // commit together or not at all.
 func (s *Store) CreateTransaction(ctx context.Context, t domain.Transaction) (domain.Transaction, bool, error) {
+	fingerprint := transactionFingerprint(t)
 	var out domain.Transaction
 	replayed := false
 	err := pgxutil.WithTenantTx(ctx, s.pool, t.TenantID, func(tx pgx.Tx) error {
-		// 1. Idempotency first: an existing key returns the stored response.
-		stored, ok, err := lookupIdempotentTx(ctx, tx, t.IdempotencyKey)
+		// 1. Idempotency first: an existing key returns the stored response,
+		// but only when the request payload matches its fingerprint; a reused
+		// key with a different payload is a conflict (LC-006).
+		stored, storedHash, ok, err := lookupIdempotentTx(ctx, tx, t.IdempotencyKey)
 		if err != nil {
 			return err
 		}
 		if ok {
+			if len(storedHash) > 0 && !bytes.Equal(storedHash, fingerprint) {
+				return fmt.Errorf("%w: idempotency key reused with a different payload", app.ErrIdempotencyConflict)
+			}
 			out, replayed = stored, true
 			return nil
 		}
@@ -595,8 +682,8 @@ func (s *Store) CreateTransaction(ctx context.Context, t domain.Transaction) (do
 				return err
 			}
 		}
-		// 5. Idempotency record with the response snapshot.
-		if err := storeIdempotentResponse(ctx, tx, t.TenantID, t.IdempotencyKey, 201, t); err != nil {
+		// 5. Idempotency record with the response snapshot and payload fingerprint.
+		if err := storeIdempotentResponse(ctx, tx, t.TenantID, t.IdempotencyKey, 201, t, fingerprint); err != nil {
 			return err
 		}
 		out = t
@@ -604,16 +691,21 @@ func (s *Store) CreateTransaction(ctx context.Context, t domain.Transaction) (do
 	})
 	if err != nil {
 		// Concurrent duplicate: another request with the same key won the
-		// race. Retry the lookup once and serve the stored response.
+		// race. Retry the lookup once and serve the stored response (unless the
+		// winner's payload differs, which is a conflict).
 		if isUniqueViolation(err) {
 			var stored domain.Transaction
+			var storedHash []byte
 			var ok bool
 			lerr := pgxutil.WithTenantTx(ctx, s.pool, t.TenantID, func(tx pgx.Tx) error {
 				var innerErr error
-				stored, ok, innerErr = lookupIdempotentTx(ctx, tx, t.IdempotencyKey)
+				stored, storedHash, ok, innerErr = lookupIdempotentTx(ctx, tx, t.IdempotencyKey)
 				return innerErr
 			})
 			if lerr == nil && ok {
+				if len(storedHash) > 0 && !bytes.Equal(storedHash, fingerprint) {
+					return domain.Transaction{}, false, fmt.Errorf("%w: idempotency key reused with a different payload", app.ErrIdempotencyConflict)
+				}
 				return stored, true, nil
 			}
 			return domain.Transaction{}, false, mapErr(err)
@@ -762,7 +854,7 @@ func (s *Store) ReverseTransaction(ctx context.Context, tenantID, id uuid.UUID, 
 			UPDATE transactions SET status = 'reversed', reversed_by_id = $2 WHERE id = $1`, id, rev.ID); err != nil {
 			return err
 		}
-		if err := storeIdempotentResponse(ctx, tx, rev.TenantID, rev.IdempotencyKey, 201, rev); err != nil {
+		if err := storeIdempotentResponse(ctx, tx, rev.TenantID, rev.IdempotencyKey, 201, rev, transactionFingerprint(rev)); err != nil {
 			return err
 		}
 		payload := app.TransactionReversedEvent{
@@ -816,10 +908,13 @@ func (s *Store) CreateHold(ctx context.Context, h domain.Hold) (domain.Hold, boo
 	var out domain.Hold
 	replayed := false
 	err := pgxutil.WithTenantTx(ctx, s.pool, h.TenantID, func(tx pgx.Tx) error {
-		// Idempotent replay.
+		// Idempotent replay: same key must carry the same payload (LC-006).
 		existing, err := scanHold(tx.QueryRow(ctx,
 			`SELECT `+holdColumns+` FROM holds WHERE idempotency_key = $1`, h.IdempotencyKey))
 		if err == nil {
+			if !bytes.Equal(holdFingerprint(existing), holdFingerprint(h)) {
+				return fmt.Errorf("%w: idempotency key reused with a different payload", app.ErrIdempotencyConflict)
+			}
 			out, replayed = existing, true
 			return nil
 		}
@@ -889,7 +984,8 @@ func (s *Store) CreateHold(ctx context.Context, h domain.Hold) (domain.Hold, boo
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
-			// Concurrent duplicate: serve the winner's hold.
+			// Concurrent duplicate: serve the winner's hold, unless its payload
+			// differs (conflict).
 			var existing domain.Hold
 			lerr := pgxutil.WithTenantTx(ctx, s.pool, h.TenantID, func(tx pgx.Tx) error {
 				var innerErr error
@@ -898,6 +994,9 @@ func (s *Store) CreateHold(ctx context.Context, h domain.Hold) (domain.Hold, boo
 				return innerErr
 			})
 			if lerr == nil {
+				if !bytes.Equal(holdFingerprint(existing), holdFingerprint(h)) {
+					return domain.Hold{}, false, fmt.Errorf("%w: idempotency key reused with a different payload", app.ErrIdempotencyConflict)
+				}
 				return existing, true, nil
 			}
 		}
@@ -1228,6 +1327,42 @@ func (s *Store) Statement(ctx context.Context, tenantID, accountID uuid.UUID, fr
 			e.Amount = money.Amount{Asset: asset, Units: units}
 			e.Running = domain.RunningBalance(nb, openingRaw[asset], runningRaw)
 			out.Entries = append(out.Entries, e)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// VerifyBalances recomputes posted/pending balances from the postings of a
+// ledger and returns the (account, asset) rows where the derived
+// account_balances table disagrees (LC integrity verifier). An empty result
+// means the derived table is consistent with its source of truth.
+func (s *Store) VerifyBalances(ctx context.Context, tenantID, ledgerID uuid.UUID) ([]domain.BalanceDiscrepancy, error) {
+	var out []domain.BalanceDiscrepancy
+	err := pgxutil.WithTenantTx(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
+		var one int
+		err := tx.QueryRow(ctx, `SELECT 1 FROM ledgers WHERE id = $1`, ledgerID).Scan(&one)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("ledger %s: %w", ledgerID, app.ErrNotFound)
+		}
+		if err != nil {
+			return err
+		}
+		rows, err := tx.Query(ctx, `SELECT * FROM verify_account_balances($1)`, ledgerID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var d domain.BalanceDiscrepancy
+			if err := rows.Scan(&d.AccountID, &d.Asset,
+				&d.ComputedPostedDebits, &d.StoredPostedDebits,
+				&d.ComputedPostedCredits, &d.StoredPostedCredits,
+				&d.ComputedPendingDebits, &d.StoredPendingDebits,
+				&d.ComputedPendingCredits, &d.StoredPendingCredits); err != nil {
+				return err
+			}
+			out = append(out, d)
 		}
 		return rows.Err()
 	})

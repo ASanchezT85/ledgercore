@@ -33,6 +33,7 @@ type apiKeyResponse struct {
 	Environment string    `json:"environment"`
 	Name        string    `json:"name"`
 	KeyPrefix   string    `json:"key_prefix"`
+	Scopes      []string  `json:"scopes"`
 	Secret      string    `json:"secret,omitempty"` // present only on creation
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -132,8 +133,9 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		TenantID    string `json:"tenant_id"`
 		Environment string `json:"environment"`
 		Name        string `json:"name"`
-		// Accepted for forward compatibility with the documented API
-		// (infra/README.md); issued tokens carry app.DefaultScopes today.
+		// Scopes bounds what tokens minted from this key may do; omitted or
+		// empty applies app.DefaultScopes. Values outside the allowed set are
+		// rejected (400).
 		Scopes []string `json:"scopes"`
 	}
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
@@ -145,7 +147,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeValidationFailed, "tenant_id must be a valid UUID")
 		return
 	}
-	key, secret, err := s.svc.CreateAPIKey(r.Context(), tenantID, req.Environment, req.Name)
+	key, secret, err := s.svc.CreateAPIKey(r.Context(), tenantID, req.Environment, req.Name, req.Scopes)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -156,6 +158,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		Environment: key.Environment,
 		Name:        key.Name,
 		KeyPrefix:   key.KeyPrefix,
+		Scopes:      key.Scopes,
 		Secret:      secret, // shown exactly once
 		CreatedAt:   key.CreatedAt,
 	})

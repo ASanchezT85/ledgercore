@@ -1,0 +1,106 @@
+package postgres
+
+// LC-002 anti-leak RLS contract test for the webhooks schema.
+//
+// Tenant A owns a subscription and a delivery; tenant B must not be able to
+// read or modify either through the tenant-scoped repository. Mirrors the
+// ledger-core RLS isolation gate. Requires LEDGERCORE_TEST_DATABASE_URL and a
+// pool connected as the NOBYPASSRLS app role (the production setup); it is
+// meaningful only because migration 0003 FORCEs RLS on both tables.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/ledgercore/ledgercore/libs/go/httpx"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
+)
+
+func TestRLSCrossTenantIsolation(t *testing.T) {
+	pool := testPool(t)
+	repo := NewRepo(pool, nil)
+	ctx := context.Background()
+
+	tenantA := uuid.New()
+	tenantB := uuid.New() // intruder, zero data
+
+	sub := domain.Subscription{
+		ID:         uuid.New(),
+		TenantID:   tenantA,
+		URL:        "https://a.example.com/hooks",
+		Secret:     "whsec_tenantAsecret0000000000000000",
+		EventTypes: []string{"*"},
+		Active:     true,
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := repo.Create(ctx, sub); err != nil {
+		t.Fatalf("tenant A create subscription: %v", err)
+	}
+	payload, _ := json.Marshal(map[string]string{"type": "ledger.transaction.posted"})
+	del := domain.Delivery{
+		ID:             uuid.New(),
+		TenantID:       tenantA,
+		SubscriptionID: sub.ID,
+		EventID:        uuid.New(),
+		EventType:      "ledger.transaction.posted",
+		Payload:        payload,
+		Status:         domain.StatusPending,
+		NextAttemptAt:  time.Now().UTC(),
+		CreatedAt:      time.Now().UTC(),
+	}
+	if err := repo.InsertPending(ctx, tenantA, []domain.Delivery{del}); err != nil {
+		t.Fatalf("tenant A insert delivery: %v", err)
+	}
+
+	t.Run("cross-tenant reads see nothing", func(t *testing.T) {
+		if _, err := repo.Get(ctx, tenantB, sub.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("Get: want ErrNotFound, got %v", err)
+		}
+		if got, err := repo.List(ctx, tenantB, 50, httpx.Cursor{}); err != nil || len(got) != 0 {
+			t.Errorf("List: want 0 rows nil err, got %d rows err=%v", len(got), err)
+		}
+		if got, err := repo.ListActive(ctx, tenantB); err != nil || len(got) != 0 {
+			t.Errorf("ListActive: want 0 rows nil err, got %d rows err=%v", len(got), err)
+		}
+		got, _, err := repo.ListDeliveries(ctx, tenantB, app.DeliveryFilter{Limit: 50})
+		if err != nil || len(got) != 0 {
+			t.Errorf("ListDeliveries: want 0 rows nil err, got %d rows err=%v", len(got), err)
+		}
+	})
+
+	t.Run("cross-tenant writes fail closed", func(t *testing.T) {
+		active := false
+		if _, err := repo.Update(ctx, tenantB, sub.ID, nil, nil, &active); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("Update foreign sub: want ErrNotFound, got %v", err)
+		}
+		if err := repo.RotateSecret(ctx, tenantB, sub.ID, "whsec_hijack00000000000000000000000", time.Now().UTC().Add(time.Hour)); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("RotateSecret foreign sub: want ErrNotFound, got %v", err)
+		}
+		if _, err := repo.Requeue(ctx, tenantB, del.ID); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("Requeue foreign delivery: want ErrNotFound, got %v", err)
+		}
+		if err := repo.MarkDelivered(ctx, tenantB, del.ID, 200); err != nil {
+			t.Errorf("MarkDelivered foreign delivery: unexpected err %v", err)
+		}
+	})
+
+	// Sanity: tenant A is unaffected — the delivery is still pending and the
+	// subscription still active (the foreign writes above changed nothing).
+	got, err := repo.Get(ctx, tenantA, sub.ID)
+	if err != nil {
+		t.Fatalf("tenant A lost access to its own subscription: %v", err)
+	}
+	if !got.Active {
+		t.Fatal("foreign Update leaked: tenant A subscription was deactivated")
+	}
+	page, _, err := repo.ListDeliveries(ctx, tenantA, app.DeliveryFilter{Status: domain.StatusPending, Limit: 10})
+	if err != nil || len(page) != 1 {
+		t.Fatalf("foreign MarkDelivered leaked: want 1 pending, got %d (err %v)", len(page), err)
+	}
+}

@@ -79,6 +79,8 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, app.ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, httpx.CodeNotFound, "resource not found")
+	case errors.Is(err, app.ErrIdempotencyConflict):
+		httpx.WriteError(w, r, http.StatusConflict, httpx.CodeIdempotencyConflict, "idempotency key reused with a different request payload")
 	case errors.Is(err, app.ErrConflict):
 		httpx.WriteError(w, r, http.StatusConflict, httpx.CodeConflict, "a resource with those unique attributes already exists")
 	case errors.Is(err, app.ErrInvalidState):

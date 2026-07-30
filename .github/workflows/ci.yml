@@ -44,9 +44,12 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   # Mandatory anti-leak gate (blueprint §14, Fase 1a): the RLS contract test
-  # runs against a real Postgres provisioned exactly like production (app
-  # role with NOBYPASSRLS + per-service schemas + goose migrations). No
-  # continue-on-error: a cross-tenant leak must block the merge.
+  # runs against a real Postgres provisioned exactly like production (schemas
+  # owned by the migrator + per-service NOBYPASSRLS runtime roles + goose
+  # migrations). The test harness applies migrations and then queries over the
+  # same connection, so it runs as the migrator; FORCE ROW LEVEL SECURITY in
+  # the migrations makes the tenant policies apply even to the owner, so a
+  # cross-tenant leak still fails the gate. No continue-on-error.
   rls-contract:
     name: rls contract (ledger-core + postgres)
     runs-on: ubuntu-latest
@@ -78,10 +81,70 @@ jobs:
       - name: Run integration tests (migrations run inside the test harness)
         working-directory: services/ledger-core
         env:
-          LEDGERCORE_TEST_DATABASE_URL: "postgres://ledgercore_app:ledgercore_dev@localhost:5432/ledgercore?search_path=ledger"
+          LEDGERCORE_TEST_DATABASE_URL: "postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore?search_path=ledger"
         run: |
           go test ./internal/adapters/postgres/ -run TestRLSCrossTenantIsolation -v
           go test ./... -count=1
+
+  # Infra role-model gate (LC-014 / LC-002). Provisions the init SQL and proves
+  # the privilege boundaries directly: a runtime role can DML its own schema but
+  # cannot run DDL, cannot touch a sibling schema, and cannot escalate to the
+  # maintenance role. Pure psql — no service code involved.
+  role-separation:
+    name: postgres role separation (init SQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: ledgercore
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ledgercore"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision roles and schemas (init SQL)
+        run: psql "postgres://postgres:postgres@localhost:5432/ledgercore" -v ON_ERROR_STOP=1 -f infra/postgres/init/01-init.sql
+
+      - name: Runtime role is NOSUPERUSER + NOBYPASSRLS
+        run: |
+          psql "postgres://postgres:postgres@localhost:5432/ledgercore" -tAc \
+            "SELECT bool_and(NOT rolsuper AND NOT rolbypassrls) FROM pg_roles WHERE rolname LIKE 'ledgercore_%_rt'" \
+            | grep -qx t
+
+      - name: Runtime role CANNOT run DDL in its own schema
+        run: |
+          M="postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore"
+          RT="postgres://ledgercore_ledger_rt:ledgercore_ledger_rt_dev@localhost:5432/ledgercore"
+          psql "$M" -v ON_ERROR_STOP=1 -c "SET search_path=ledger; CREATE TABLE t(id int, tenant_id uuid);"
+          if psql "$RT" -c "SET search_path=ledger; CREATE TABLE hax(id int);" 2>/dev/null; then
+            echo "::error::runtime role was able to CREATE a table — DDL not revoked"; exit 1
+          fi
+          # DML on the migrator-created table must work (default privileges).
+          psql "$RT" -v ON_ERROR_STOP=1 -c "SET search_path=ledger; INSERT INTO t VALUES (1, gen_random_uuid()); SELECT count(*) FROM t;"
+
+      - name: Runtime role CANNOT read a sibling schema
+        run: |
+          M="postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore"
+          RT="postgres://ledgercore_ledger_rt:ledgercore_ledger_rt_dev@localhost:5432/ledgercore"
+          psql "$M" -v ON_ERROR_STOP=1 -c "SET search_path=identity; CREATE TABLE secrets(id int);"
+          if psql "$RT" -c "SELECT * FROM identity.secrets;" 2>/dev/null; then
+            echo "::error::runtime role read a sibling schema — cross-schema not revoked"; exit 1
+          fi
+
+      - name: Runtime role CANNOT escalate to the maintenance role
+        run: |
+          RT="postgres://ledgercore_ledger_rt:ledgercore_ledger_rt_dev@localhost:5432/ledgercore"
+          if psql "$RT" -c "SET ROLE ledgercore_maint;" 2>/dev/null; then
+            echo "::error::runtime role escalated to ledgercore_maint"; exit 1
+          fi
 
   web:
     name: web (apps/console)
@@ -114,3 +177,75 @@ jobs:
 
       - name: Validate compose file
         run: docker compose -f infra/compose/docker-compose.yml config -q
+
+  # Secret scanning (LC-003): fail the PR if a credential is committed. Runs on
+  # the full history of the checkout so a secret introduced and later "removed"
+  # is still caught. The packaging script (scripts/export-clean.sh) runs the
+  # same tool before emitting an archive.
+  secret-scan:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # OpenAPI anti-drift gate (LC-010). The contracts in contracts/openapi/ are
+  # the single source of truth; apps/console/public/openapi/ holds committed
+  # copies that the console's prebuild syncs. This job (a) lints the specs and
+  # (b) fails if the committed copies diverge from the source — the exact drift
+  # a prebuild can silently hide inside a PR.
+  contracts:
+    name: openapi lint + anti-drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # ADVISORY for now (continue-on-error): the current specs have defects
+      # that must be fixed by the contracts owner before this can gate merges —
+      # ledger.v1.yaml / webhooks.v1.yaml crash spectral on a null enum,
+      # reconciliation.v1.yaml has a duplicate `parameters` key + a path-params
+      # mismatch, and identity.v1.yaml / webhooks.v1.yaml reference
+      # components.parameters (PageLimit / PageCursor) that are only defined in
+      # reconciliation.v1.yaml. Once those are fixed, drop continue-on-error so
+      # a lint failure blocks the PR.
+      - name: Lint OpenAPI (spectral) [advisory]
+        continue-on-error: true
+        run: |
+          npx --yes @stoplight/spectral-cli@6 lint \
+            --ruleset .github/spectral.yaml \
+            --fail-severity=error \
+            contracts/openapi/*.yaml
+
+      - name: Fail on contract/console drift
+        run: |
+          set -e
+          drift=0
+          for src in contracts/openapi/*.yaml; do
+            copy="apps/console/public/openapi/$(basename "$src")"
+            if [ ! -f "$copy" ]; then
+              echo "::error::missing console copy for $src ($copy)"
+              drift=1
+            elif ! diff -q "$src" "$copy" >/dev/null; then
+              echo "::error::$copy is out of sync with $src (run the console prebuild and commit)"
+              diff -u "$src" "$copy" || true
+              drift=1
+            fi
+          done
+          # Also fail if the console carries a spec that no longer exists in contracts/.
+          for copy in apps/console/public/openapi/*.yaml; do
+            src="contracts/openapi/$(basename "$copy")"
+            if [ ! -f "$src" ]; then
+              echo "::error::$copy has no source in contracts/openapi/"
+              drift=1
+            fi
+          done
+          exit $drift

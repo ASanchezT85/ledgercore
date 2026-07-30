@@ -98,10 +98,15 @@ func (s *Store) ListTenants(ctx context.Context, limit int, cursor httpx.Cursor)
 
 // CreateAPIKey inserts a key (hash + prefix only).
 func (s *Store) CreateAPIKey(ctx context.Context, k domain.APIKey) error {
+	scopes := k.Scopes
+	if scopes == nil {
+		// The column is NOT NULL; a nil slice would encode as SQL NULL.
+		scopes = []string{}
+	}
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO api_keys (id, tenant_id, environment, name, key_prefix, secret_hash, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		k.ID, k.TenantID, k.Environment, k.Name, k.KeyPrefix, k.SecretHash, k.CreatedAt,
+		`INSERT INTO api_keys (id, tenant_id, environment, name, key_prefix, secret_hash, scopes, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		k.ID, k.TenantID, k.Environment, k.Name, k.KeyPrefix, k.SecretHash, scopes, k.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: insert api key: %w", err)
@@ -113,7 +118,7 @@ func (s *Store) CreateAPIKey(ctx context.Context, k domain.APIKey) error {
 // are possible in principle; the caller disambiguates by hash).
 func (s *Store) FindAPIKeysByPrefix(ctx context.Context, prefix string) ([]domain.APIKey, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, tenant_id, environment, name, key_prefix, secret_hash, created_at, revoked_at
+		`SELECT id, tenant_id, environment, name, key_prefix, secret_hash, scopes, created_at, revoked_at
 		 FROM api_keys WHERE key_prefix = $1`,
 		prefix,
 	)
@@ -125,7 +130,7 @@ func (s *Store) FindAPIKeysByPrefix(ctx context.Context, prefix string) ([]domai
 	var out []domain.APIKey
 	for rows.Next() {
 		var k domain.APIKey
-		if err := rows.Scan(&k.ID, &k.TenantID, &k.Environment, &k.Name, &k.KeyPrefix, &k.SecretHash, &k.CreatedAt, &k.RevokedAt); err != nil {
+		if err := rows.Scan(&k.ID, &k.TenantID, &k.Environment, &k.Name, &k.KeyPrefix, &k.SecretHash, &k.Scopes, &k.CreatedAt, &k.RevokedAt); err != nil {
 			return nil, fmt.Errorf("postgres: scan api key: %w", err)
 		}
 		out = append(out, k)

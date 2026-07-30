@@ -28,6 +28,50 @@ const (
 	EnvLive    = "live"
 )
 
+// Scopes are the authorization capabilities a token carries. Authentication
+// (a valid signature) is not authorization: routes gate on these via
+// RequireScope, and the identity service mints tokens with a bounded subset
+// (never the wildcard, which only dev auth-disabled mode injects).
+//
+// Convention: "<service>:read" for safe/read-only operations, "<service>:write"
+// for state-changing ones. Deny-by-default — a route with no matching scope
+// on the token yields 403.
+const (
+	// ScopeWildcard grants every scope. Reserved for dev auth-disabled mode;
+	// it is never issued by the identity service.
+	ScopeWildcard = "*"
+
+	ScopeLedgerRead    = "ledger:read"
+	ScopeLedgerWrite   = "ledger:write"
+	ScopeReconRead     = "reconciliation:read"
+	ScopeReconWrite    = "reconciliation:write"
+	ScopeWebhooksRead  = "webhooks:read"
+	ScopeWebhooksWrite = "webhooks:write"
+)
+
+// Service audiences. A token issued by identity carries every service
+// audience in its "aud" claim; each service validates that its own audience
+// is present (see AuthConfig.ExpectedAudience). This rejects tokens minted
+// for a different audience set (e.g. a future admin API).
+const (
+	AudienceLedgerCore     = "ledger-core"
+	AudienceReconciliation = "reconciliation"
+	AudienceWebhooks       = "webhooks"
+)
+
+// DefaultAudiences is the audience set stamped on every issued token. Kept as
+// a function so callers cannot mutate a shared slice.
+func DefaultAudiences() []string {
+	return []string{AudienceLedgerCore, AudienceReconciliation, AudienceWebhooks}
+}
+
+// DefaultIssuer is the "iss" claim the identity service stamps and every
+// service verifies.
+const DefaultIssuer = "ledgercore-identity"
+
+// DefaultClockSkew bounds the tolerated clock drift when validating exp/iat/nbf.
+const DefaultClockSkew = 60 * time.Second
+
 // Claims is the authenticated identity attached to every request.
 type Claims struct {
 	Subject     string
@@ -36,10 +80,11 @@ type Claims struct {
 	Scopes      []string
 }
 
-// HasScope reports whether the token carries the given scope.
+// HasScope reports whether the token carries the given scope. The wildcard
+// scope "*" (dev auth-disabled mode only) satisfies any check.
 func (c Claims) HasScope(scope string) bool {
 	for _, s := range c.Scopes {
-		if s == scope {
+		if s == scope || s == ScopeWildcard {
 			return true
 		}
 	}
@@ -188,15 +233,68 @@ func (c *jwksCache) fetch() error {
 	return nil
 }
 
-// RequireAuth returns a middleware that authenticates every request.
+// AuthConfig configures RequireAuthConfig. Zero values fall back to safe
+// defaults (DefaultIssuer, DefaultClockSkew); an empty ExpectedAudience skips
+// the audience check for backward compatibility with callers that have not
+// opted in yet.
+type AuthConfig struct {
+	// JWKSURL is the identity service JWKS endpoint used to validate EdDSA
+	// signatures.
+	JWKSURL string
+	// AuthDisabled trusts the X-Tenant-Id header instead of a JWT (dev only).
+	AuthDisabled bool
+	// ExpectedIssuer, when non-empty, requires the token "iss" to equal it.
+	ExpectedIssuer string
+	// ExpectedAudience, when non-empty, requires it to appear in the token
+	// "aud" claim.
+	ExpectedAudience string
+	// ClockSkew bounds tolerated drift for exp/iat/nbf. Zero uses
+	// DefaultClockSkew.
+	ClockSkew time.Duration
+}
+
+// RequireAuth returns the default authentication middleware: validates the
+// EdDSA signature, requires exp, enforces the platform issuer and a bounded
+// clock skew, and requires a non-empty subject. It does NOT enforce an
+// audience (callers opt in via RequireAuthConfig). Kept for the many callers
+// that pass (jwksURL, authDisabled).
+func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Handler {
+	return RequireAuthConfig(AuthConfig{
+		JWKSURL:        jwksURL,
+		AuthDisabled:   authDisabled,
+		ExpectedIssuer: DefaultIssuer,
+	})
+}
+
+// RequireAuthConfig returns a middleware that authenticates every request per
+// cfg.
 //
 // Normal mode: expects "Authorization: Bearer <jwt>", validates the EdDSA
-// signature against the JWKS at jwksURL and injects Claims into the context.
+// signature against the JWKS at cfg.JWKSURL, enforces exp (required), iss,
+// aud (when configured), a bounded clock skew and a non-empty subject, then
+// injects Claims into the context.
 //
-// Disabled mode (dev only, LEDGERCORE_AUTH_DISABLED=true): trusts the
-// X-Tenant-Id header and fabricates sandbox claims with full scope.
-func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Handler {
-	cache := newJWKSCache(jwksURL)
+// Disabled mode (dev only, cfg.AuthDisabled): trusts the X-Tenant-Id header
+// and fabricates sandbox claims with the wildcard scope.
+func RequireAuthConfig(cfg AuthConfig) func(http.Handler) http.Handler {
+	cache := newJWKSCache(cfg.JWKSURL)
+	authDisabled := cfg.AuthDisabled
+	skew := cfg.ClockSkew
+	if skew <= 0 {
+		skew = DefaultClockSkew
+	}
+	parserOpts := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
+		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
+		jwt.WithLeeway(skew),
+	}
+	if cfg.ExpectedIssuer != "" {
+		parserOpts = append(parserOpts, jwt.WithIssuer(cfg.ExpectedIssuer))
+	}
+	if cfg.ExpectedAudience != "" {
+		parserOpts = append(parserOpts, jwt.WithAudience(cfg.ExpectedAudience))
+	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -236,9 +334,16 @@ func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Hand
 					return nil, errors.New("token header is missing kid")
 				}
 				return cache.key(kid)
-			}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}), jwt.WithExpirationRequired())
+			}, parserOpts...)
 			if err != nil || !token.Valid {
 				writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "token is invalid or expired")
+				return
+			}
+
+			// A signed token with an empty subject carries no principal;
+			// reject it rather than attribute actions to "".
+			if strings.TrimSpace(tc.Subject) == "" {
+				writeAuthError(w, r, http.StatusUnauthorized, "unauthorized", "token subject (sub) is required")
 				return
 			}
 
@@ -259,6 +364,28 @@ func RequireAuth(jwksURL string, authDisabled bool) func(http.Handler) http.Hand
 				Scopes:      tc.Scopes,
 			}
 			next.ServeHTTP(w, r.WithContext(ContextWithClaims(r.Context(), claims)))
+		})
+	}
+}
+
+// RequireScope returns a middleware that authorizes a request against a
+// single required scope. It MUST be composed inside RequireAuth (it reads the
+// Claims that RequireAuth injects). Missing claims -> 401; present but missing
+// the scope -> 403. This is the enforcement half of the scope model: a token
+// authenticates a principal, RequireScope decides what that principal may do.
+func RequireScope(scope string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := ClaimsFromContext(r.Context())
+			if !ok {
+				writeAuthError(w, r, http.StatusUnauthorized, httpx.CodeUnauthorized, "authentication is required")
+				return
+			}
+			if !claims.HasScope(scope) {
+				writeAuthError(w, r, http.StatusForbidden, httpx.CodeForbidden, "token is missing the required scope "+scope)
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

@@ -319,15 +319,6 @@ components:
         EdDSA JWT issued by the identity service. Claims: `tenant_id` (UUID),
         `env` (`sandbox` | `live`), `scopes` (string array).
 
-  parameters:
-    ResourceId:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-
   responses:
     BadRequest:
       description: Invalid input (`validation_failed`) or malformed pagination cursor (`invalid_cursor`).
@@ -356,6 +347,13 @@ components:
             $ref: '#/components/schemas/Error'
 
   parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     PageLimit:
       name: limit
       in: query

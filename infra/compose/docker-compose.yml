@@ -38,6 +38,40 @@ services:
       timeout: 5s
       retries: 10
 
+  # --------------------------------------------------------------------- #
+  # Migration one-shot (LC-014 / LC-002).                                 #
+  # Runs every service's goose migrations as the OWNER/MIGRATOR role, then #
+  # reassigns SECURITY DEFINER functions to ledgercore_maint and grants    #
+  # EXECUTE to the runtime roles (infra/postgres/migrate/grants.sql).      #
+  # Exits when done; the Go services below run with DDL-less runtime roles  #
+  # (LEDGERCORE_AUTO_MIGRATE=false) and wait for it to complete.           #
+  # The migrator password is the dev-only value seeded by 01-init.sql.     #
+  # --------------------------------------------------------------------- #
+  migrate:
+    image: golang:1.26-alpine
+    working_dir: /repo
+    volumes:
+      - ../..:/repo:ro
+      - go_cache:/go
+    environment:
+      GOFLAGS: "-mod=mod"
+      MIGRATOR_DSN: "postgres://ledgercore_migrator:ledgercore_migrator_dev@postgres:5432/ledgercore?sslmode=disable"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        apk add --no-cache postgresql-client >/dev/null
+        export PATH="$$PATH:$$(go env GOPATH)/bin"
+        command -v goose >/dev/null 2>&1 || go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
+        goose -dir /repo/services/ledger-core/internal/adapters/postgres/migrations   postgres "$$MIGRATOR_DSN&search_path=ledger"   up
+        goose -dir /repo/services/identity/internal/adapters/postgres/migrations       postgres "$$MIGRATOR_DSN&search_path=identity" up
+        goose -dir /repo/services/reconciliation/internal/adapters/postgres/migrations postgres "$$MIGRATOR_DSN&search_path=recon"    up
+        goose -dir /repo/services/webhooks/internal/adapters/postgres/migrations       postgres "$$MIGRATOR_DSN&search_path=webhooks" up
+        psql "$$MIGRATOR_DSN" -v ON_ERROR_STOP=1 -f /repo/infra/postgres/migrate/grants.sql
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   nats:
     image: nats:2.10-alpine
     # -js enables JetStream, -m 8222 enables the HTTP monitoring endpoint.
@@ -89,10 +123,13 @@ services:
       dockerfile: services/ledger-core/Dockerfile
     environment:
       LEDGERCORE_HTTP_ADDR: ":8081"
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_app:ledgercore_dev@postgres:5432/ledgercore?search_path=ledger"
+      # Runtime role: DML-only on the ledger schema, NOBYPASSRLS, no DDL.
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_ledger_rt:ledgercore_ledger_rt_dev@postgres:5432/ledgercore?search_path=ledger"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
-      LEDGERCORE_AUTO_MIGRATE: "true"
+      # Migrations run in the `migrate` one-shot as the owner role; runtime
+      # never applies DDL.
+      LEDGERCORE_AUTO_MIGRATE: "false"
       # dev only: tenant comes from X-Tenant-Id. Override with
       # LEDGERCORE_AUTH_DISABLED=false to exercise real JWT auth via JWKS.
       LEDGERCORE_AUTH_DISABLED: "${LEDGERCORE_AUTH_DISABLED:-true}"
@@ -103,6 +140,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ledger-core.entrypoints=web"
@@ -116,10 +155,11 @@ services:
       dockerfile: services/identity/Dockerfile
     environment:
       LEDGERCORE_HTTP_ADDR: ":8082"
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_app:ledgercore_dev@postgres:5432/ledgercore?search_path=identity"
+      # Runtime role: DML-only on the identity schema, NOBYPASSRLS, no DDL.
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_identity_rt:ledgercore_identity_rt_dev@postgres:5432/ledgercore?search_path=identity"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
-      LEDGERCORE_AUTO_MIGRATE: "true"
+      LEDGERCORE_AUTO_MIGRATE: "false"
       LEDGERCORE_AUTH_DISABLED: "true"
       # Bootstrap token for system-level endpoints (create tenants/API keys).
       LEDGERCORE_ADMIN_TOKEN: "dev-admin-token"
@@ -134,6 +174,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.identity.entrypoints=web"
@@ -147,10 +189,11 @@ services:
       dockerfile: services/reconciliation/Dockerfile
     environment:
       LEDGERCORE_HTTP_ADDR: ":8083"
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_app:ledgercore_dev@postgres:5432/ledgercore?search_path=recon"
+      # Runtime role: DML-only on the recon schema, NOBYPASSRLS, no DDL.
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_recon_rt:ledgercore_recon_rt_dev@postgres:5432/ledgercore?search_path=recon"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
-      LEDGERCORE_AUTO_MIGRATE: "true"
+      LEDGERCORE_AUTO_MIGRATE: "false"
       LEDGERCORE_AUTH_DISABLED: "true"
     ports:
       - "8083:8083"
@@ -159,6 +202,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.reconciliation.entrypoints=web"
@@ -172,10 +217,11 @@ services:
       dockerfile: services/webhooks/Dockerfile
     environment:
       LEDGERCORE_HTTP_ADDR: ":8084"
-      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_app:ledgercore_dev@postgres:5432/ledgercore?search_path=webhooks"
+      # Runtime role: DML-only on the webhooks schema, NOBYPASSRLS, no DDL.
+      LEDGERCORE_DATABASE_URL: "postgres://ledgercore_webhooks_rt:ledgercore_webhooks_rt_dev@postgres:5432/ledgercore?search_path=webhooks"
       LEDGERCORE_NATS_URL: "nats://nats:4222"
       LEDGERCORE_JWKS_URL: "http://identity:8082/.well-known/jwks.json"
-      LEDGERCORE_AUTO_MIGRATE: "true"
+      LEDGERCORE_AUTO_MIGRATE: "false"
       LEDGERCORE_AUTH_DISABLED: "true"
     ports:
       - "8084:8084"
@@ -184,6 +230,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.webhooks.entrypoints=web"
@@ -226,3 +274,6 @@ services:
 
 volumes:
   postgres_data:
+  # Go module + build cache for the `migrate` one-shot, so goose is installed
+  # once and reused across `up` runs instead of re-downloaded each time.
+  go_cache:

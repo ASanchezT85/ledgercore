@@ -18,20 +18,49 @@ import (
 	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
 	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
+	"github.com/ledgercore/ledgercore/services/webhooks/internal/keycrypt"
 )
 
 // Repo implements app.SubscriptionStore, app.DeliveryStore and the
 // dispatcher store against the webhooks schema.
 type Repo struct {
 	pool *pgxpool.Pool
+	// cipher encrypts the signing secret (and previous_secret) at rest with
+	// envelope AES-256-GCM. Nil in dev when LEDGERCORE_MASTER_KEY is unset:
+	// secrets are then stored/read as plaintext (WARN at startup).
+	cipher *keycrypt.Cipher
 }
 
 // NewRepo builds the repository on top of a pool pinned to the webhooks schema.
-func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
+// cipher may be nil (dev only), in which case secrets are stored in plaintext.
+func NewRepo(pool *pgxpool.Pool, cipher *keycrypt.Cipher) *Repo {
+	return &Repo{pool: pool, cipher: cipher}
+}
 
 const subscriptionColumns = "id, tenant_id, url, secret, event_types, active, created_at, previous_secret, previous_secret_expires_at"
 
-func scanSubscription(row pgx.Row) (domain.Subscription, error) {
+// encryptSecret seals a plaintext signing secret bound to the subscription id.
+// A nil cipher (dev) stores the value verbatim.
+func (r *Repo) encryptSecret(plaintext string, subID uuid.UUID) (string, error) {
+	if r.cipher == nil || plaintext == "" {
+		return plaintext, nil
+	}
+	return r.cipher.Encrypt(plaintext, subID.String())
+}
+
+// decryptSecret opens a stored secret bound to the subscription id. Legacy
+// plaintext values (no enc:v1: prefix) pass through unchanged.
+func (r *Repo) decryptSecret(stored string, subID uuid.UUID) (string, error) {
+	if stored == "" {
+		return "", nil
+	}
+	if !keycrypt.IsEncrypted(stored) {
+		return stored, nil
+	}
+	return r.cipher.Decrypt(stored, subID.String())
+}
+
+func (r *Repo) scanSubscription(row pgx.Row) (domain.Subscription, error) {
 	var s domain.Subscription
 	err := row.Scan(&s.ID, &s.TenantID, &s.URL, &s.Secret, &s.EventTypes, &s.Active, &s.CreatedAt,
 		&s.PreviousSecret, &s.PreviousSecretExpiresAt)
@@ -41,6 +70,16 @@ func scanSubscription(row pgx.Row) (domain.Subscription, error) {
 	if err != nil {
 		return domain.Subscription{}, fmt.Errorf("postgres: scan subscription: %w", err)
 	}
+	if s.Secret, err = r.decryptSecret(s.Secret, s.ID); err != nil {
+		return domain.Subscription{}, fmt.Errorf("postgres: decrypt secret: %w", err)
+	}
+	if s.PreviousSecret != nil {
+		plain, err := r.decryptSecret(*s.PreviousSecret, s.ID)
+		if err != nil {
+			return domain.Subscription{}, fmt.Errorf("postgres: decrypt previous secret: %w", err)
+		}
+		s.PreviousSecret = &plain
+	}
 	return s, nil
 }
 
@@ -48,11 +87,15 @@ func scanSubscription(row pgx.Row) (domain.Subscription, error) {
 
 // Create inserts a new subscription.
 func (r *Repo) Create(ctx context.Context, sub domain.Subscription) error {
+	secret, err := r.encryptSecret(sub.Secret, sub.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: encrypt secret: %w", err)
+	}
 	return pgxutil.WithTenantTx(ctx, r.pool, sub.TenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO subscriptions (id, tenant_id, url, secret, event_types, active, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			sub.ID, sub.TenantID, sub.URL, sub.Secret, sub.EventTypes, sub.Active, sub.CreatedAt)
+			sub.ID, sub.TenantID, sub.URL, secret, sub.EventTypes, sub.Active, sub.CreatedAt)
 		return err
 	})
 }
@@ -86,7 +129,7 @@ func (r *Repo) querySubscriptions(ctx context.Context, tenantID uuid.UUID, q str
 		}
 		defer rows.Close()
 		for rows.Next() {
-			s, err := scanSubscription(rows)
+			s, err := r.scanSubscription(rows)
 			if err != nil {
 				return err
 			}
@@ -105,7 +148,7 @@ func (r *Repo) Get(ctx context.Context, tenantID, id uuid.UUID) (domain.Subscrip
 	var out domain.Subscription
 	err := pgxutil.WithTenantTx(ctx, r.pool, tenantID, func(tx pgx.Tx) error {
 		var err error
-		out, err = scanSubscription(tx.QueryRow(ctx,
+		out, err = r.scanSubscription(tx.QueryRow(ctx,
 			"SELECT "+subscriptionColumns+" FROM subscriptions WHERE id = $1 AND tenant_id = $2", id, tenantID))
 		return err
 	})
@@ -134,7 +177,7 @@ func (r *Repo) Update(ctx context.Context, tenantID, id uuid.UUID, url *string, 
 		}
 		if len(sets) == 0 {
 			var err error
-			out, err = scanSubscription(tx.QueryRow(ctx,
+			out, err = r.scanSubscription(tx.QueryRow(ctx,
 				"SELECT "+subscriptionColumns+" FROM subscriptions WHERE id = $1 AND tenant_id = $2", id, tenantID))
 			return err
 		}
@@ -143,7 +186,7 @@ func (r *Repo) Update(ctx context.Context, tenantID, id uuid.UUID, url *string, 
 			"UPDATE subscriptions SET %s WHERE id = $%d AND tenant_id = $%d RETURNING %s",
 			strings.Join(sets, ", "), len(args)-1, len(args), subscriptionColumns)
 		var err error
-		out, err = scanSubscription(tx.QueryRow(ctx, q, args...))
+		out, err = r.scanSubscription(tx.QueryRow(ctx, q, args...))
 		return err
 	})
 	return out, err
@@ -152,13 +195,20 @@ func (r *Repo) Update(ctx context.Context, tenantID, id uuid.UUID, url *string, 
 // RotateSecret installs a new signing secret, keeping the old one as
 // previous_secret until prevExpiresAt so in-flight receivers keep verifying.
 func (r *Repo) RotateSecret(ctx context.Context, tenantID, id uuid.UUID, secret string, prevExpiresAt time.Time) error {
+	enc, err := r.encryptSecret(secret, id)
+	if err != nil {
+		return fmt.Errorf("postgres: encrypt secret: %w", err)
+	}
+	// previous_secret = secret copies the already-encrypted current value
+	// (same subscription-id AAD), so it stays decryptable during the grace
+	// window; secret = $2 installs the freshly encrypted new value.
 	return pgxutil.WithTenantTx(ctx, r.pool, tenantID, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `
 			UPDATE subscriptions
 			SET previous_secret = secret,
 			    previous_secret_expires_at = $1,
 			    secret = $2
-			WHERE id = $3 AND tenant_id = $4`, prevExpiresAt, secret, id, tenantID)
+			WHERE id = $3 AND tenant_id = $4`, prevExpiresAt, enc, id, tenantID)
 		if err != nil {
 			return err
 		}
@@ -186,6 +236,75 @@ func (r *Repo) PurgeExpiredPreviousSecrets(ctx context.Context) (int64, error) {
 	})
 	if err != nil {
 		return 0, fmt.Errorf("postgres: purge expired previous secrets: %w", err)
+	}
+	return n, nil
+}
+
+// ReencryptPlaintextSecrets migrates any subscription whose secret (or
+// previous_secret) is still stored in plaintext to the encrypted-at-rest
+// format (LC-008). It is a no-op when no cipher is configured (dev). Runs in a
+// system transaction because it spans tenants; each secret is sealed with the
+// subscription-id AAD. Returns the number of rows re-encrypted.
+func (r *Repo) ReencryptPlaintextSecrets(ctx context.Context) (int64, error) {
+	if r.cipher == nil {
+		return 0, nil
+	}
+	var n int64
+	err := pgxutil.WithSystemTx(ctx, r.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, secret, previous_secret FROM subscriptions
+			WHERE secret NOT LIKE 'enc:v1:%'
+			   OR (previous_secret IS NOT NULL AND previous_secret NOT LIKE 'enc:v1:%')`)
+		if err != nil {
+			return err
+		}
+		type pending struct {
+			id     uuid.UUID
+			secret string
+			prev   *string
+		}
+		var todo []pending
+		for rows.Next() {
+			var p pending
+			if err := rows.Scan(&p.id, &p.secret, &p.prev); err != nil {
+				rows.Close()
+				return err
+			}
+			todo = append(todo, p)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, p := range todo {
+			encSecret := p.secret
+			if !keycrypt.IsEncrypted(encSecret) {
+				if encSecret, err = r.cipher.Encrypt(encSecret, p.id.String()); err != nil {
+					return err
+				}
+			}
+			var encPrev *string
+			if p.prev != nil {
+				v := *p.prev
+				if !keycrypt.IsEncrypted(v) {
+					if v, err = r.cipher.Encrypt(v, p.id.String()); err != nil {
+						return err
+					}
+				}
+				encPrev = &v
+			}
+			tag, err := tx.Exec(ctx,
+				"UPDATE subscriptions SET secret = $1, previous_secret = $2 WHERE id = $3",
+				encSecret, encPrev, p.id)
+			if err != nil {
+				return err
+			}
+			n += tag.RowsAffected()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("postgres: reencrypt plaintext secrets: %w", err)
 	}
 	return n, nil
 }
@@ -330,6 +449,18 @@ func (r *Repo) ClaimDue(ctx context.Context, limit int, lease time.Duration) ([]
 				&c.Payload, &c.Attempts, &c.URL, &c.Secret,
 				&c.PreviousSecret, &c.PreviousSecretExpiresAt); err != nil {
 				return err
+			}
+			// Decrypt in memory just to sign the outgoing delivery; the
+			// plaintext never touches the DB or the logs.
+			if c.Secret, err = r.decryptSecret(c.Secret, c.SubscriptionID); err != nil {
+				return fmt.Errorf("decrypt secret for subscription %s: %w", c.SubscriptionID, err)
+			}
+			if c.PreviousSecret != nil {
+				plain, derr := r.decryptSecret(*c.PreviousSecret, c.SubscriptionID)
+				if derr != nil {
+					return fmt.Errorf("decrypt previous secret for subscription %s: %w", c.SubscriptionID, derr)
+				}
+				c.PreviousSecret = &plain
 			}
 			out = append(out, c)
 		}
