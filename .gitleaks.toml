@@ -1,0 +1,43 @@
+# Gitleaks config for LedgerCore (LC-003 / R-001).
+# Extends the default ruleset; adds an allowlist so DOCUMENTED EXAMPLE values and
+# TEST FIXTURES do not trip the gate, while a real secret committed to real
+# source/config (services/*, infra/*, a .env) is still caught.
+#
+# What is allowlisted and why:
+#   - Example credential shapes used throughout docs/specs/SDK snippets:
+#       lk_sandbox_… / lk_live_…  (illustrative API keys)
+#       whsec_…                    (illustrative webhook secrets)
+#     These are placeholders, never issued.
+#   - Test fixtures: hardcoded AES master keys used only to exercise the
+#     encryption round-trip in *_test.go / *.test.ts / *Test.php.
+#   - Documentation & contract surfaces that carry the example values above:
+#     docs/, READMEs, OpenAPI specs (source + the console's committed copies),
+#     the console docs pages, mock data, and the integration report.
+#
+# Real product source (services/*/internal non-test, infra/, cmd/) and any .env
+# are NOT allowlisted, so a genuine leak there still fails export + CI.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented example credentials and encryption test fixtures"
+regexes = [
+  '''lk_(sandbox|live)_[A-Za-z0-9_]+''',
+  '''whsec_[A-Za-z0-9_]+''',
+  # Test-only master keys: named constants in encryption unit tests.
+  '''(?i)(crypt)?test[_]?master[_]?key\s*[:=]\s*"?[0-9a-f]{32,64}"?''',
+]
+paths = [
+  '''.*_test\.go$''',
+  '''.*\.test\.ts$''',
+  '''.*Test\.php$''',
+  '''contracts/openapi/.*\.ya?ml$''',
+  '''apps/console/public/openapi/.*\.ya?ml$''',
+  '''apps/console/app/docs/.*''',
+  '''apps/console/app/.*/quickstart-view\.tsx$''',
+  '''apps/console/lib/mock-data\.ts$''',
+  '''docs/.*\.md$''',
+  '''.*/README\.md$''',
+  '''INTEGRATION-REPORT\.md$''',
+]

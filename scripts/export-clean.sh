@@ -51,8 +51,10 @@ HAVE_GITLEAKS=0
 if command -v gitleaks >/dev/null 2>&1; then
     HAVE_GITLEAKS=1
     echo ">> Scanning git history for secrets with gitleaks (up to ${REF})"
-    if ! gitleaks detect --source "$REPO_ROOT" --redact --no-banner \
-        --log-opts="--all"; then
+    # Uses the repo's .gitleaks.toml (allowlists documented example creds and
+    # encryption test fixtures; real source/config/.env still caught).
+    if ! gitleaks detect --source "$REPO_ROOT" --config "$REPO_ROOT/.gitleaks.toml" \
+        --redact --no-banner --log-opts="--all"; then
         echo "error: gitleaks detected potential secrets in history — refusing to export." >&2
         echo "       Review the findings above, purge the secret, and rotate it." >&2
         exit 2
@@ -93,7 +95,7 @@ if [ "$HAVE_GITLEAKS" = "1" ]; then
     SCAN_DIR="$(mktemp -d)"
     trap 'rm -rf "$SCAN_DIR"' EXIT
     tar xzf "$ARCHIVE" -C "$SCAN_DIR"
-    if ! gitleaks detect --source "$SCAN_DIR" --no-git --redact --no-banner; then
+    if ! gitleaks detect --source "$SCAN_DIR" --config "$REPO_ROOT/.gitleaks.toml" --no-git --redact --no-banner; then
         echo "error: gitleaks detected secrets INSIDE the built archive — deleting it." >&2
         rm -f "$ARCHIVE"
         exit 2

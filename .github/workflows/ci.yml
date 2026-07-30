@@ -240,6 +240,9 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Allowlist documented example creds + encryption test fixtures; real
+          # source/config/.env leaks still fail. Same config export-clean uses.
+          GITLEAKS_CONFIG: .gitleaks.toml
 
   # OpenAPI anti-drift gate (LC-010). The contracts in contracts/openapi/ are
   # the single source of truth; apps/console/public/openapi/ holds committed
