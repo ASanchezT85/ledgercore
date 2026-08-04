@@ -35,6 +35,7 @@ services:
       LEDGERCORE_IDENTITY_RT_PASSWORD: "${LEDGERCORE_IDENTITY_RT_PASSWORD:-ledgercore_identity_rt_dev}"
       LEDGERCORE_RECON_RT_PASSWORD: "${LEDGERCORE_RECON_RT_PASSWORD:-ledgercore_recon_rt_dev}"
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: "${LEDGERCORE_WEBHOOKS_RT_PASSWORD:-ledgercore_webhooks_rt_dev}"
+      LEDGERCORE_BLOG_RT_PASSWORD: "${LEDGERCORE_BLOG_RT_PASSWORD:-ledgercore_blog_rt_dev}"
     ports:
       - "5432:5432"
     volumes:
@@ -74,6 +75,7 @@ services:
         goose -dir /repo/services/identity/internal/adapters/postgres/migrations       postgres "$$MIGRATOR_DSN&search_path=identity" up
         goose -dir /repo/services/reconciliation/internal/adapters/postgres/migrations postgres "$$MIGRATOR_DSN&search_path=recon"    up
         goose -dir /repo/services/webhooks/internal/adapters/postgres/migrations       postgres "$$MIGRATOR_DSN&search_path=webhooks" up
+        goose -dir /repo/apps/console/migrations                                      postgres "$$MIGRATOR_DSN&search_path=blog"     up
         psql "$$MIGRATOR_DSN" -v ON_ERROR_STOP=1 -f /repo/infra/postgres/migrate/grants.sql
     restart: "no"
     depends_on:
@@ -264,11 +266,17 @@ services:
       # Read server-side at request time (pages are force-dynamic); inside the
       # compose network the gateway is reachable by service name.
       NEXT_PUBLIC_API_URL: "http://gateway:8080"
+      # Public content only (blog views + comments). This role has NO privilege
+      # on the money schemas — see infra/postgres/init/01-init.sql step 6.
+      BLOG_DATABASE_URL: "postgres://ledgercore_blog_rt:${LEDGERCORE_BLOG_RT_PASSWORD:-ledgercore_blog_rt_dev}@postgres:5432/ledgercore?sslmode=disable"
+      # Salt for the visitor/author hashes: we never store a raw IP.
+      BLOG_HASH_SALT: "${LEDGERCORE_BLOG_HASH_SALT:-ledgercore_blog_salt_dev}"
     ports:
       - "3000:3000"
     profiles: ["web"]
     depends_on:
       - gateway
+      - postgres
 
   # --------------------------------------------------------------------- #
   # Observability, all-in-one (profile: obs)                              #

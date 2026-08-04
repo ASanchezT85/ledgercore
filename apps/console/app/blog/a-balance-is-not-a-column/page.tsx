@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { SixFigureDebtClient } from "./post-client";
+import { BalanceColumnPostClient } from "./post-client";
 
-const TITLE = "The six-figure debt that existed in no system";
+const TITLE = "A balance is not a column";
 const DESCRIPTION =
-  "A payment provider said we owed them six figures. Our systems said we owed them nothing. Five scars from operating money movement on mutable tables — and the ledger principles each one burned in.";
+  "The moment you store a balance in a column you have two sources of truth and no way to tell which one is lying. Atomic materialization, the drift query, and why derived always wins.";
 
 export const metadata: Metadata = {
   title: `${TITLE} · LedgerCore`,
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     siteName: "LedgerCore",
-    publishedTime: "2026-07-28T00:00:00.000Z",
+    publishedTime: "2026-08-01T00:00:00.000Z",
     authors: ["Alexander Sanchez"],
   },
   twitter: {
@@ -24,6 +24,6 @@ export const metadata: Metadata = {
   },
 };
 
-export default function SixFigureDebtPost() {
-  return <SixFigureDebtClient />;
+export default function BalanceColumnPost() {
+  return <BalanceColumnPostClient />;
 }

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { SixFigureDebtClient } from "./post-client";
+import { HoldsPostClient } from "./post-client";
 
-const TITLE = "The six-figure debt that existed in no system";
+const TITLE = "A hold is money, not an intention";
 const DESCRIPTION =
-  "A payment provider said we owed them six figures. Our systems said we owed them nothing. Five scars from operating money movement on mutable tables — and the ledger principles each one burned in.";
+  "A wallet 97% frozen with zero open orders. Why reservations modelled as a flag strand customer funds, and what changes when a hold becomes a posting between two accounts.";
 
 export const metadata: Metadata = {
   title: `${TITLE} · LedgerCore`,
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     siteName: "LedgerCore",
-    publishedTime: "2026-07-28T00:00:00.000Z",
+    publishedTime: "2026-08-04T00:00:00.000Z",
     authors: ["Alexander Sanchez"],
   },
   twitter: {
@@ -24,6 +24,6 @@ export const metadata: Metadata = {
   },
 };
 
-export default function SixFigureDebtPost() {
-  return <SixFigureDebtClient />;
+export default function HoldsPost() {
+  return <HoldsPostClient />;
 }

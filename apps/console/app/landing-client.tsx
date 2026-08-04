@@ -18,8 +18,8 @@ import {
   Timer,
   Webhook,
 } from "lucide-react";
-import { BrandLockup } from "@/components/logo";
-import { LanguageProvider, LangToggle, useLang } from "@/components/language";
+import { LanguageProvider, useLang } from "@/components/language";
+import { PublicFooter, PublicHeader } from "@/components/public-header";
 
 const CURL_SNIPPET = `curl -X POST https://api.ledgercore.dev/v1/transactions \\
   -H "Authorization: Bearer $LEDGERCORE_API_KEY" \\
@@ -100,42 +100,7 @@ function LandingContent() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <BrandLockup size={30} />
-        <nav className="flex items-center gap-2" aria-label={t.nav.ariaLabel}>
-          <LangToggle />
-          <Link
-            href="/blog"
-            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
-          >
-            {t.nav.blog}
-          </Link>
-          <Link
-            href="/docs"
-            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
-          >
-            {t.nav.docs}
-          </Link>
-          <Link
-            href="/docs/quickstart"
-            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
-          >
-            {t.nav.quickstart}
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
-          >
-            {t.nav.login}
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-(--radius-control) border border-edge-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent/60 hover:text-accent"
-          >
-            {t.nav.trySandbox}
-          </Link>
-        </nav>
-      </header>
+      <PublicHeader />
 
       {/* Hero */}
       <section className="mx-auto w-full max-w-6xl px-6 pt-16 pb-20 text-center sm:pt-24">
@@ -346,14 +311,7 @@ function LandingContent() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-edge">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8">
-          <BrandLockup size={22} />
-          <p className="text-[11px] tracking-wide text-ink-faint">
-            {t.footer.tagline}
-          </p>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

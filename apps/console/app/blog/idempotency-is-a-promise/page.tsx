@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { SixFigureDebtClient } from "./post-client";
+import { IdempotencyPostClient } from "./post-client";
 
-const TITLE = "The six-figure debt that existed in no system";
+const TITLE = "Idempotency is not a header, it's a promise";
 const DESCRIPTION =
-  "A payment provider said we owed them six figures. Our systems said we owed them nothing. Five scars from operating money movement on mutable tables — and the ledger principles each one burned in.";
+  "Accepting an Idempotency-Key and doing nothing with it is worse than not accepting one. The three guarantees it must actually make, and the race that breaks the naive implementation.";
 
 export const metadata: Metadata = {
   title: `${TITLE} · LedgerCore`,
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     siteName: "LedgerCore",
-    publishedTime: "2026-07-28T00:00:00.000Z",
+    publishedTime: "2026-07-30T00:00:00.000Z",
     authors: ["Alexander Sanchez"],
   },
   twitter: {
@@ -24,6 +24,6 @@ export const metadata: Metadata = {
   },
 };
 
-export default function SixFigureDebtPost() {
-  return <SixFigureDebtClient />;
+export default function IdempotencyPost() {
+  return <IdempotencyPostClient />;
 }
