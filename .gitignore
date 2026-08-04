@@ -66,3 +66,7 @@ tmp/
 backups/
 .claude/skills/gstack/
 apps/console/.env.local
+
+# Binarios temporales de `go test` cuando GOTMPDIR apunta al repo
+# (rodeo para politicas de Application Control que bloquean %TEMP%).
+.gotmp/
