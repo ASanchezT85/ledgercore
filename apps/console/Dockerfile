@@ -28,7 +28,13 @@ COPY apps/console/ ./
 ENV NEXT_TELEMETRY_DISABLED=1 \
     CI=true \
     npm_config_verify_deps_before_run=false
-RUN pnpm build
+# Invoke Next directly instead of `pnpm build`: running it as a pnpm SCRIPT is
+# what triggers the deps re-verification above, and neither CI=true nor the
+# env-var form of the setting suppresses it in pnpm 11.20 (both were tried on
+# 2026-08-04; the implicit install hung with zero CPU every time). node_modules
+# came from the deps stage against the frozen lockfile, so there is nothing to
+# verify — go straight to the compiler.
+RUN node_modules/.bin/next build
 
 # --- runtime ---
 FROM node:26-alpine AS runner
