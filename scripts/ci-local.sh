@@ -39,7 +39,7 @@ cd "$WORK"
 # Postgres. Integration tests self-skip when LEDGERCORE_TEST_DATABASE_URL is
 # unset (the DB-backed gates run as their own jobs, below). We intentionally do
 # NOT export one DB URL across all modules — each service owns its own schema.
-for mod in libs/go services/ledger-core services/identity services/reconciliation services/webhooks; do
+for mod in libs/go infra/postgres/policytest services/ledger-core services/identity services/reconciliation services/webhooks; do
   say "go build/vet/test — $mod"
   ( cd "$mod" && env -u LEDGERCORE_TEST_DATABASE_URL go build ./... && \
                  env -u LEDGERCORE_TEST_DATABASE_URL go vet ./... && \
