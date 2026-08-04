@@ -219,17 +219,17 @@ END $$;`
 
 	// Stand-ins for the money schemas. Created only if missing so a shared CI
 	// database keeps whatever the service suites already built there.
+	//
+	// NOTHING here touches ledgercore_blog_rt's privileges on them. That is the
+	// whole point: an earlier draft of this test REVOKEd them first and then
+	// asserted the denial, which made it assert a posture it had just created —
+	// it stayed green even after a deliberate GRANT. The denial must come from
+	// the role model as provisioned elsewhere, never from this function.
 	for _, schema := range moneySchemas {
 		mustExec(ctx, t, admin, fmt.Sprintf(
 			"CREATE SCHEMA IF NOT EXISTS %s AUTHORIZATION ledgercore_migrator", schema))
 		mustExec(ctx, t, admin, fmt.Sprintf(
 			"CREATE TABLE IF NOT EXISTS %s.policy_probe (id bigserial PRIMARY KEY, note text)", schema))
-		// Exactly the posture 01-init.sql ends with.
-		mustExec(ctx, t, admin, fmt.Sprintf("REVOKE ALL ON SCHEMA %s FROM PUBLIC", schema))
-		mustExec(ctx, t, admin, fmt.Sprintf(
-			"REVOKE ALL ON SCHEMA %s FROM ledgercore_blog_rt", schema))
-		mustExec(ctx, t, admin, fmt.Sprintf(
-			"REVOKE ALL ON ALL TABLES IN SCHEMA %s FROM ledgercore_blog_rt", schema))
 	}
 
 	// Rebuild `blog` from scratch so the migration under test is the only
