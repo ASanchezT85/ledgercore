@@ -53,6 +53,48 @@ const es = {
   ],
   statsFootPre: "El estado del dinero no puede vivir en columnas de Excel ni en un campo ",
   statsFootPost: " que alguien actualiza a mano.",
+  scenarios: {
+    answerLabel: "Qué hace LedgerCore:",
+    title: "Cuatro escenarios que ya viviste",
+    subtitle:
+      "No son casos hipotéticos: son las noches que nos costaron construir esto. Si reconoces alguno, sabes exactamente para qué sirve LedgerCore.",
+    items: [
+      {
+        role: "Finanzas / Cierre de mes",
+        title: "El saldo no cuadra y nadie sabe desde cuándo",
+        scenario:
+          "El total de los wallets dice una cosa, el extracto del banco dice otra. La diferencia lleva semanas ahí y el cierre queda trabado mientras alguien revisa transacción por transacción.",
+        answer:
+          "Cada saldo es la suma de sus asientos, no una columna que alguien escribe. Puedes recalcularlo a cualquier fecha de corte y ver el punto exacto donde las dos series se separan.",
+      },
+      {
+        role: "Compliance / Auditoría",
+        title: "Te piden justificar un movimiento de hace ocho meses",
+        scenario:
+          "El auditor señala una línea vieja y pregunta qué la originó. El registro se actualizó tres veces desde entonces y el estado anterior no quedó en ningún lado.",
+        answer:
+          "El ledger es append-only: nada se edita, todo se corrige con un asiento nuevo. Cada centavo conserva su operación de origen y el histórico completo es reconstruible.",
+      },
+      {
+        role: "Ingeniería / Plataforma",
+        title: "El reintento acreditó dos veces al mismo cliente",
+        scenario:
+          "El proveedor no recibió tu 200, reintentó el callback y el depósito entró duplicado. Lo detectas días después, cuando el cliente ya retiró la diferencia.",
+        answer:
+          "La Idempotency-Key es parte del contrato, no una convención. El segundo POST devuelve la misma transacción en lugar de crear otra — el reintento deja de ser un riesgo.",
+      },
+      {
+        role: "Soporte / Operaciones",
+        title: "Hay fondos retenidos sin operación viva detrás",
+        scenario:
+          "El cliente reclama que su saldo disponible no le alcanza. Hay dinero reservado por una operación que nunca se completó ni se canceló, y liberarlo requiere tocar la base a mano.",
+        answer:
+          "Los holds son de primera clase: se reservan, expiran y se liberan con el mismo rigor contable que un posteo. El saldo disponible siempre es el posteado menos los holds vigentes, y cada uno es visible con su origen.",
+      },
+    ],
+    footNote:
+      "¿Tu escenario no está acá? Es exactamente lo que queremos escuchar — estamos en descubrimiento.",
+  },
   how: {
     title: "Una API, asientos siempre balanceados",
     subtitle:
@@ -180,6 +222,48 @@ const en: typeof es = {
   ],
   statsFootPre: "The state of your money can't live in Excel columns or a ",
   statsFootPost: " field someone updates by hand.",
+  scenarios: {
+    answerLabel: "What LedgerCore does:",
+    title: "Four scenarios you've already lived",
+    subtitle:
+      "These aren't hypotheticals — they're the nights that made us build this. If you recognize one, you already know what LedgerCore is for.",
+    items: [
+      {
+        role: "Finance / Month-end close",
+        title: "The balance doesn't match and nobody knows since when",
+        scenario:
+          "Wallet totals say one thing, the bank statement says another. The gap has been there for weeks, and the close is stuck while someone walks transaction by transaction.",
+        answer:
+          "Every balance is the sum of its entries, not a column someone writes. Recompute it as of any cutoff date and see the exact point where the two series diverge.",
+      },
+      {
+        role: "Compliance / Audit",
+        title: "You're asked to justify a movement from eight months ago",
+        scenario:
+          "The auditor points at an old line and asks what caused it. The record has been updated three times since, and the previous state was never kept anywhere.",
+        answer:
+          "The ledger is append-only: nothing is edited, everything is corrected with a new entry. Every cent keeps the operation that originated it, and the full history is reconstructable.",
+      },
+      {
+        role: "Engineering / Platform",
+        title: "The retry credited the same customer twice",
+        scenario:
+          "The provider never got your 200, retried the callback, and the deposit landed twice. You find out days later, once the customer has already withdrawn the difference.",
+        answer:
+          "The Idempotency-Key is part of the contract, not a convention. The second POST returns the same transaction instead of creating another one — a retry stops being a risk.",
+      },
+      {
+        role: "Support / Operations",
+        title: "Funds are held with no live operation behind them",
+        scenario:
+          "A customer reports their available balance is short. Money is reserved by an operation that never completed nor got cancelled, and releasing it means touching the database by hand.",
+        answer:
+          "Holds are first-class: reserved, expired, and released with the same accounting rigor as a posting. Available balance is always posted minus live holds, and each hold is visible with its origin.",
+      },
+    ],
+    footNote:
+      "Your scenario isn't here? That's exactly what we want to hear — we're in discovery.",
+  },
   how: {
     title: "One API, always-balanced entries",
     subtitle:

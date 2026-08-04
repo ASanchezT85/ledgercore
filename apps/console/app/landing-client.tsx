@@ -7,11 +7,15 @@ import {
   CheckCircle2,
   FileCheck2,
   Fingerprint,
+  CalendarClock,
   Layers,
   LayoutDashboard,
   Lock,
+  RefreshCcw,
   Scale,
+  Search,
   ShieldCheck,
+  Timer,
   Webhook,
 } from "lucide-react";
 import { BrandLockup } from "@/components/logo";
@@ -52,6 +56,8 @@ const FEATURE_ICONS = [
 ] as const;
 
 const TRUST_ICONS = [BookLock, ShieldCheck, Layers] as const;
+
+const SCENARIO_ICONS = [CalendarClock, Search, RefreshCcw, Timer] as const;
 
 function CtaPrimary({
   href,
@@ -174,6 +180,53 @@ function LandingContent() {
           {t.statsFootPre}
           <code className="font-mono text-xs">balance</code>
           {t.statsFootPost}
+        </p>
+      </section>
+
+      {/* Scenarios */}
+      <section className="mx-auto w-full max-w-6xl px-6 pb-20">
+        <div className="mb-8 text-center">
+          <h2 className="text-2xl font-semibold tracking-tight text-ink">
+            {t.scenarios.title}
+          </h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+            {t.scenarios.subtitle}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {t.scenarios.items.map(({ role, title, scenario, answer }, i) => {
+            const Icon = SCENARIO_ICONS[i] ?? CalendarClock;
+            return (
+              <article
+                key={title}
+                className="flex flex-col rounded-(--radius-card) border border-edge bg-surface/70 p-6 transition-colors hover:border-accent/40"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
+                    <Icon size={17} className="text-accent" aria-hidden="true" />
+                  </span>
+                  <span className="text-[11px] font-medium tracking-widest text-ink-faint uppercase">
+                    {role}
+                  </span>
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-ink">
+                  {title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                  {scenario}
+                </p>
+                <p className="mt-4 border-t border-edge pt-4 text-sm leading-relaxed text-ink">
+                  <span className="mr-2 font-semibold text-accent">
+                    {t.scenarios.answerLabel}
+                  </span>
+                  {answer}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+        <p className="mt-6 text-center text-sm text-ink-faint">
+          {t.scenarios.footNote}
         </p>
       </section>
 
