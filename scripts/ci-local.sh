@@ -90,6 +90,17 @@ else
       go test ./internal/adapters/postgres/... -count=1 ) 2>&1 | tee -a "$LOG"
     [ "${PIPESTATUS[0]}" -eq 0 ] || fail=1
   done
+
+  # Anti-leak contract for the `blog` schema. Its owner is the console (Node),
+  # so it has no Go service of its own — the check lives in infra, which owns
+  # the role model it verifies. Runs LAST on purpose: it asserts that the blog
+  # role has no privilege on the four money schemas, so it should see them
+  # exactly as the service suites above left them.
+  say "anti-leak contract — blog role vs money schemas"
+  ( cd "infra/postgres/policytest" && \
+    LEDGERCORE_TEST_ADMIN_URL="$PG_ADMIN" \
+    go test ./... -count=1 ) 2>&1 | tee -a "$LOG"
+  [ "${PIPESTATUS[0]}" -eq 0 ] || fail=1
 fi
 
 say "RESULT"
