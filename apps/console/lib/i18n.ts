@@ -180,6 +180,36 @@ const es = {
     errInvalid: "Revisá el nombre y el texto del comentario.",
     errNetwork: "No se pudo enviar. Revisá tu conexión.",
   },
+  moderation: {
+    metaTitle: "Moderación de comentarios · LedgerCore",
+    title: "Moderación de comentarios",
+    subtitle:
+      "Todos los comentarios del blog, ocultos incluidos. Ocultar un comentario raíz también oculta sus respuestas; restaurarlo no las devuelve una por una.",
+    tokenLabel: "Token de moderación",
+    tokenPlaceholder: "Pegá el BLOG_ADMIN_TOKEN",
+    tokenHint:
+      "Se guarda solo en esta pestaña (sessionStorage) y viaja en el header Authorization.",
+    enter: "Entrar",
+    signOut: "Salir",
+    errUnauthorized: "Token inválido.",
+    errNotConfigured:
+      "La moderación no está configurada: falta BLOG_ADMIN_TOKEN en el servidor.",
+    errUnavailable: "No se pudo contactar la base de datos.",
+    empty: "No hay comentarios todavía.",
+    filterAll: "Todos",
+    filterVisible: "Visibles",
+    filterHidden: "Ocultos",
+    statusVisible: "Visible",
+    statusHidden: "Oculto",
+    hide: "Ocultar",
+    restore: "Restaurar",
+    remove: "Eliminar",
+    confirmRemove:
+      "Se elimina de forma permanente, junto con sus respuestas. ¿Seguir?",
+    replyTo: "en respuesta a",
+    openPost: "Ver el post",
+    total: "comentarios",
+  },
   login: {
     tagline: "Consola de operaciones · ledger de doble partida como servicio",
     title: "Iniciar sesión",
@@ -403,6 +433,36 @@ const en: typeof es = {
     errUnavailable: "Comments are unavailable right now.",
     errInvalid: "Check the name and the comment text.",
     errNetwork: "Could not send. Check your connection.",
+  },
+  moderation: {
+    metaTitle: "Comment moderation · LedgerCore",
+    title: "Comment moderation",
+    subtitle:
+      "Every blog comment, hidden ones included. Hiding a root comment also hides its replies; restoring it does not bring them back one by one.",
+    tokenLabel: "Moderation token",
+    tokenPlaceholder: "Paste the BLOG_ADMIN_TOKEN",
+    tokenHint:
+      "Kept in this tab only (sessionStorage) and sent in the Authorization header.",
+    enter: "Enter",
+    signOut: "Sign out",
+    errUnauthorized: "Invalid token.",
+    errNotConfigured:
+      "Moderation is not configured: BLOG_ADMIN_TOKEN is missing on the server.",
+    errUnavailable: "Could not reach the database.",
+    empty: "No comments yet.",
+    filterAll: "All",
+    filterVisible: "Visible",
+    filterHidden: "Hidden",
+    statusVisible: "Visible",
+    statusHidden: "Hidden",
+    hide: "Hide",
+    restore: "Restore",
+    remove: "Delete",
+    confirmRemove:
+      "This permanently deletes it, along with its replies. Continue?",
+    replyTo: "replying to",
+    openPost: "Open the post",
+    total: "comments",
   },
   login: {
     tagline: "Operations console · double-entry ledger as a service",

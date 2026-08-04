@@ -271,6 +271,9 @@ services:
       BLOG_DATABASE_URL: "postgres://ledgercore_blog_rt:${LEDGERCORE_BLOG_RT_PASSWORD:-ledgercore_blog_rt_dev}@postgres:5432/ledgercore?sslmode=disable"
       # Salt for the visitor/author hashes: we never store a raw IP.
       BLOG_HASH_SALT: "${LEDGERCORE_BLOG_HASH_SALT:-ledgercore_blog_salt_dev}"
+      # Operator secret for /moderation. Unset => the panel answers 503 and
+      # nobody can moderate; it is never the tenant API key.
+      BLOG_ADMIN_TOKEN: "${LEDGERCORE_BLOG_ADMIN_TOKEN:-ledgercore_blog_admin_dev}"
     ports:
       - "3000:3000"
     profiles: ["web"]
