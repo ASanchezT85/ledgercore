@@ -18,8 +18,16 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY apps/console/ ./
 # CI=true stops pnpm's deps-status check from trying to purge node_modules
 # (no TTY inside docker build -> ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY).
+#
+# verify-deps-before-run=false is load-bearing: pnpm >= 11.20 re-verifies the
+# store before running a script and, on any drift, silently starts a SECOND
+# install inside `pnpm build`. That install hits the network and can hang
+# indefinitely (observed 2026-08-04: three builds stuck with zero CPU right
+# after "Done in 22.2s"). node_modules already arrived from the deps stage;
+# there is nothing left to install here.
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    CI=true
+    CI=true \
+    npm_config_verify_deps_before_run=false
 RUN pnpm build
 
 # --- runtime ---
