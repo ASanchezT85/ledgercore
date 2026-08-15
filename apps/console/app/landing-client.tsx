@@ -110,9 +110,7 @@ function LandingContent() {
         </p>
         <h1 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tight text-ink sm:text-5xl sm:leading-[1.15]">
           {t.hero.titlePre}
-          <span className="bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent">
-            {t.hero.titleHighlight}
-          </span>
+          <span className="text-accent">{t.hero.titleHighlight}</span>
           {t.hero.titlePost}
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
