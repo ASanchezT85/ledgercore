@@ -17,11 +17,13 @@ export function PublicHeader({
   showHome?: boolean;
 }) {
   const { t } = useLang();
+  // `hidden sm:inline-flex`: en 375px los seis items partian la cabecera en tres
+  // filas (174px, el 21% del viewport) y la primera pantalla era casi toda nav.
   const linkClass =
-    "rounded-(--radius-control) px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink";
+    "hidden h-11 items-center rounded-(--radius-control) px-4 text-sm text-ink-muted transition-colors hover:text-ink sm:inline-flex";
 
   return (
-    <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-y-3 px-6 py-6">
+    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-6">
       <Link href="/" aria-label={t.nav.homeAriaLabel}>
         <BrandLockup size={30} />
       </Link>
@@ -51,7 +53,7 @@ export function PublicHeader({
         )}
         <Link
           href="/signup"
-          className="rounded-(--radius-control) border border-edge-strong px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent/60 hover:text-accent"
+          className="inline-flex h-11 items-center rounded-(--radius-control) border border-edge-strong px-4 text-sm font-medium text-ink transition-colors hover:border-accent/60 hover:text-accent"
         >
           {t.nav.trySandbox}
         </Link>

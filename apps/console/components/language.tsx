@@ -74,7 +74,7 @@ export function LangToggle() {
           onClick={() => setLang(code)}
           aria-pressed={lang === code}
           className={
-            "rounded-[calc(var(--radius-control)-2px)] px-2.5 py-1 text-xs font-semibold uppercase transition-colors " +
+            "inline-flex h-9 items-center rounded-[calc(var(--radius-control)-2px)] px-3 text-xs font-semibold uppercase transition-colors " +
             (lang === code
               ? "bg-accent-soft text-accent"
               : "text-ink-faint hover:text-ink")
