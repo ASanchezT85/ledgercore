@@ -235,6 +235,26 @@ function LandingContent() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <section className="mx-auto w-full max-w-6xl px-6 pb-20">
+        <div className="mb-8 max-w-2xl">
+          <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
+            {t.pricing.title}
+          </h2>
+          <p className="mt-2 text-sm text-ink-muted">{t.pricing.subtitle}</p>
+        </div>
+        <dl className="max-w-3xl divide-y divide-edge border-y border-edge">
+          {t.pricing.items.map(({ term, body }) => (
+            <div key={term} className="py-5">
+              <dt className="text-base font-semibold text-ink">{term}</dt>
+              <dd className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                {body}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
       {/* Trust strip */}
       <section className="border-y border-edge bg-surface/50">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-4 px-6 py-8">

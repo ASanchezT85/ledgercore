@@ -141,6 +141,25 @@ const es = {
     "Test anti-fuga entre tenants en CI",
     "Dinero como enteros, nunca floats",
   ],
+  pricing: {
+    title: "Cuánto cuesta",
+    subtitle:
+      "Todavía no hay lista de precios pública. Decirlo es más honesto que inventar una.",
+    items: [
+      {
+        term: "El sandbox es gratis, y va a seguir siéndolo",
+        body: "API completa, sin tarjeta. No es una prueba con fecha de vencimiento: es donde averiguas si esto te sirve.",
+      },
+      {
+        term: "En producción se cobra por transacción asentada",
+        body: "Nada más. Las cuentas, las lecturas de saldo y los webhooks no se miden. Si cobráramos por cuenta, te estaríamos penalizando por modelar bien tu dinero.",
+      },
+      {
+        term: "Hoy trabajamos con un grupo chico de equipos",
+        body: "El precio se define en esa conversación, contra lo que hoy te cuesta sostener tu ledger a mano. Si ya estás moviendo dinero en serio, hablemos.",
+      },
+    ],
+  },
   finalCta: {
     title: "Deja de reconstruir el ledger. Constrúyelo una sola vez, bien.",
     subtitle:
@@ -395,6 +414,24 @@ const en: typeof es = {
     "Cross-tenant leak tests in CI",
     "Money as integers, never floats",
   ],
+  pricing: {
+    title: "What it costs",
+    subtitle: "There's no public price list yet. Saying so beats inventing one.",
+    items: [
+      {
+        term: "The sandbox is free, and it stays free",
+        body: "Full API, no card. Not a trial with an expiry date — it's where you find out whether this is for you.",
+      },
+      {
+        term: "In production you pay per posted transaction",
+        body: "That's it. Accounts, balance reads and webhook deliveries aren't metered. Charging per account would penalise you for modelling your money properly.",
+      },
+      {
+        term: "Right now we work with a small group of teams",
+        body: "Price gets set in that conversation, against what your ledger costs you to maintain by hand today. If you're already moving real money, let's talk.",
+      },
+    ],
+  },
   finalCta: {
     title: "Stop rebuilding the ledger. Build it once, and build it right.",
     subtitle:
