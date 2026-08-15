@@ -48,7 +48,7 @@ function CtaPrimary({
   return (
     <Link
       href={href}
-      className="inline-flex h-11 items-center justify-center gap-2 rounded-(--radius-control) bg-accent-deep px-6 text-sm font-semibold text-[#03150e] shadow-[0_0_28px_rgb(16_185_129/0.35)] transition-colors hover:bg-accent"
+      className="inline-flex h-11 items-center justify-center gap-2 rounded-(--radius-control) bg-accent-deep px-6 text-sm font-semibold text-[#03150e] transition-colors hover:bg-accent"
     >
       {children}
       <ArrowRight size={15} aria-hidden="true" />
