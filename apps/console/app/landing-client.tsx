@@ -103,20 +103,19 @@ function LandingContent() {
       <PublicHeader />
 
       {/* Hero */}
-      <section className="mx-auto w-full max-w-6xl px-6 pt-16 pb-20 text-center sm:pt-24">
-        <p className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-edge bg-surface/70 px-4 py-1.5 text-xs font-medium tracking-wide text-accent">
-          <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
+      <section className="mx-auto w-full max-w-6xl px-6 pt-16 pb-24 sm:pt-24">
+        <p className="mb-5 text-xs font-medium tracking-widest text-ink-faint uppercase">
           {t.hero.badge}
         </p>
-        <h1 className="mx-auto max-w-3xl text-4xl font-semibold tracking-tight text-ink sm:text-5xl sm:leading-[1.15]">
+        <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-ink sm:text-5xl sm:leading-[1.15]">
           {t.hero.titlePre}
           <span className="text-accent">{t.hero.titleHighlight}</span>
           {t.hero.titlePost}
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
           {t.hero.subtitle}
         </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-9 flex flex-wrap items-center gap-3">
           <CtaPrimary href="/signup">{t.hero.ctaPrimary}</CtaPrimary>
           <CtaSecondary href="/dashboard">{t.hero.ctaSecondary}</CtaSecondary>
         </div>
@@ -128,7 +127,7 @@ function LandingContent() {
           {t.stats.map((s) => (
             <div
               key={s.value}
-              className="rounded-(--radius-card) border border-edge bg-surface/70 p-6 text-center"
+              className="rounded-(--radius-card) border border-edge bg-surface/70 p-6"
             >
               <p className="num text-3xl font-semibold tracking-tight text-accent">
                 {s.value}
@@ -139,7 +138,7 @@ function LandingContent() {
             </div>
           ))}
         </div>
-        <p className="mt-6 text-center text-sm text-ink-faint">
+        <p className="mt-6 text-sm text-ink-faint">
           {t.statsFootPre}
           <code className="font-mono text-xs">balance</code>
           {t.statsFootPost}
@@ -148,11 +147,11 @@ function LandingContent() {
 
       {/* Scenarios */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 text-center">
+        <div className="mb-8 max-w-2xl">
           <h2 className="text-2xl font-semibold tracking-tight text-ink">
             {t.scenarios.title}
           </h2>
-          <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
             {t.scenarios.subtitle}
           </p>
         </div>
@@ -188,18 +187,18 @@ function LandingContent() {
             );
           })}
         </div>
-        <p className="mt-6 text-center text-sm text-ink-faint">
+        <p className="mt-6 text-sm text-ink-faint">
           {t.scenarios.footNote}
         </p>
       </section>
 
       {/* How it works */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 text-center">
+        <div className="mb-8 max-w-2xl">
           <h2 className="text-2xl font-semibold tracking-tight text-ink">
             {t.how.title}
           </h2>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-ink-muted">
+          <p className="mt-2 text-sm text-ink-muted">
             {t.how.subtitle}
           </p>
         </div>
@@ -247,11 +246,11 @@ function LandingContent() {
 
       {/* Features */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 text-center">
+        <div className="mb-8 max-w-2xl">
           <h2 className="text-2xl font-semibold tracking-tight text-ink">
             {t.features.title}
           </h2>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-ink-muted">
+          <p className="mt-2 text-sm text-ink-muted">
             {t.features.subtitle}
           </p>
         </div>
