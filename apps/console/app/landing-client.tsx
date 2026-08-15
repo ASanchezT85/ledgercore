@@ -5,18 +5,8 @@ import {
   ArrowRight,
   BookLock,
   CheckCircle2,
-  FileCheck2,
-  Fingerprint,
-  CalendarClock,
   Layers,
-  LayoutDashboard,
-  Lock,
-  RefreshCcw,
-  Scale,
-  Search,
   ShieldCheck,
-  Timer,
-  Webhook,
 } from "lucide-react";
 import { LanguageProvider, useLang } from "@/components/language";
 import { PublicFooter, PublicHeader } from "@/components/public-header";
@@ -46,18 +36,7 @@ const RESPONSE_SNIPPET = `{
   ]
 }`;
 
-const FEATURE_ICONS = [
-  Scale,
-  Lock,
-  FileCheck2,
-  Webhook,
-  Fingerprint,
-  LayoutDashboard,
-] as const;
-
 const TRUST_ICONS = [BookLock, ShieldCheck, Layers] as const;
-
-const SCENARIO_ICONS = [CalendarClock, Search, RefreshCcw, Timer] as const;
 
 function CtaPrimary({
   href,
@@ -156,36 +135,26 @@ function LandingContent() {
           </p>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {t.scenarios.items.map(({ role, title, scenario, answer }, i) => {
-            const Icon = SCENARIO_ICONS[i] ?? CalendarClock;
-            return (
-              <article
-                key={title}
-                className="flex flex-col rounded-(--radius-card) border border-edge bg-surface/70 p-6 transition-colors hover:border-accent/40"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
-                    <Icon size={17} className="text-accent" aria-hidden="true" />
-                  </span>
-                  <span className="text-[11px] font-medium tracking-widest text-ink-faint uppercase">
-                    {role}
-                  </span>
-                </div>
-                <h3 className="mt-4 text-base font-semibold text-ink">
-                  {title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                  {scenario}
-                </p>
-                <p className="mt-4 border-t border-edge pt-4 text-sm leading-relaxed text-ink">
-                  <span className="mr-2 font-semibold text-accent">
-                    {t.scenarios.answerLabel}
-                  </span>
-                  {answer}
-                </p>
-              </article>
-            );
-          })}
+          {t.scenarios.items.map(({ role, title, scenario, answer }) => (
+            <article
+              key={title}
+              className="flex flex-col rounded-(--radius-card) border border-edge bg-surface/70 p-6 transition-colors hover:border-accent/40"
+            >
+              <span className="text-[11px] font-medium tracking-widest text-ink-faint uppercase">
+                {role}
+              </span>
+              <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                {scenario}
+              </p>
+              <p className="mt-4 border-t border-edge pt-4 text-sm leading-relaxed text-ink">
+                <span className="mr-2 font-semibold text-ink-faint">
+                  {t.scenarios.answerLabel}
+                </span>
+                {answer}
+              </p>
+            </article>
+          ))}
         </div>
         <p className="mt-6 text-sm text-ink-faint">
           {t.scenarios.footNote}
@@ -254,24 +223,15 @@ function LandingContent() {
             {t.features.subtitle}
           </p>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {t.features.items.map(({ title, body }, i) => {
-            const Icon = FEATURE_ICONS[i] ?? Scale;
-            return (
-              <div
-                key={title}
-                className="rounded-(--radius-card) border border-edge bg-surface/70 p-6 transition-colors hover:border-accent/40"
-              >
-                <span className="inline-flex size-9 items-center justify-center rounded-lg bg-accent-soft">
-                  <Icon size={17} className="text-accent" aria-hidden="true" />
-                </span>
-                <h3 className="mt-4 text-sm font-semibold text-ink">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-                  {body}
-                </p>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 gap-x-12 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+          {t.features.items.map(({ title, body }) => (
+            <div key={title} className="border-t border-edge-strong pt-4">
+              <h3 className="text-base font-semibold text-ink">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                {body}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
