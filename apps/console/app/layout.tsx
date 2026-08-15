@@ -40,7 +40,7 @@ export default function RootLayout({
       lang="es"
       className={`${inter.variable} ${instrumentSerif.variable}`}
     >
-      <body className="bg-ambient min-h-screen font-sans antialiased">
+      <body className="min-h-screen font-sans antialiased">
         {children}
       </body>
     </html>

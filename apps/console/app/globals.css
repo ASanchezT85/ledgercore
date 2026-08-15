@@ -62,22 +62,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ambient background: faint emerald glow on deep slate. */
-.bg-ambient {
-  background:
-    radial-gradient(
-      1200px 600px at 85% -10%,
-      rgb(16 185 129 / 0.07),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 500px at -10% 110%,
-      rgb(45 212 191 / 0.05),
-      transparent 60%
-    ),
-    var(--color-canvas);
-}
-
 /* Monetary values always use tabular numerals. */
 .num {
   font-variant-numeric: tabular-nums;
