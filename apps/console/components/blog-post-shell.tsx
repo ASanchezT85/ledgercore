@@ -64,7 +64,7 @@ function Shell({
 
         {post && (
           <>
-            <h1 className="mt-8 text-3xl font-semibold tracking-tight text-ink sm:text-4xl sm:leading-[1.2]">
+            <h1 className="mt-8 font-serif text-[34px] leading-tight tracking-[-0.01em] text-ink sm:text-[42px]">
               {post.title[lang]}
             </h1>
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-faint">

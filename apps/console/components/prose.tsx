@@ -16,7 +16,7 @@ export function Lead({ children }: { children: React.ReactNode }) {
 
 export function H2({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mt-12 text-2xl font-semibold tracking-tight text-ink">
+    <h2 className="mt-12 font-serif text-[28px] leading-tight tracking-[-0.01em] text-ink">
       {children}
     </h2>
   );

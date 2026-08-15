@@ -14,7 +14,7 @@ function BlogIndexContent({ views }: { views: Record<string, number> }) {
       <PublicHeader showHome />
 
       <main className="mx-auto w-full max-w-3xl px-6 pt-10 pb-24">
-        <h1 className="text-3xl font-semibold tracking-tight text-ink">
+        <h1 className="font-serif text-[34px] leading-tight tracking-[-0.01em] text-ink">
           {t.blog.title}
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-ink-muted">

@@ -211,7 +211,7 @@ function SdksContent() {
         <Badge tone="emerald" className="mb-4">
           {c.badge}
         </Badge>
-        <h1 className="max-w-2xl text-3xl font-semibold tracking-tight text-ink">{c.title}</h1>
+        <h1 className="max-w-2xl font-serif text-[34px] leading-tight tracking-[-0.01em] text-ink">{c.title}</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">{c.subtitle}</p>
 
         <ul className="mt-6 space-y-1.5">
