@@ -86,7 +86,7 @@ function LandingContent() {
         <p className="mb-5 text-xs font-medium tracking-widest text-ink-faint uppercase">
           {t.hero.badge}
         </p>
-        <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-ink sm:text-5xl sm:leading-[1.15]">
+        <h1 className="max-w-3xl font-serif text-[42px] leading-[1.1] tracking-[-0.01em] text-ink sm:text-[56px]">
           {t.hero.titlePre}
           <span className="text-accent">{t.hero.titleHighlight}</span>
           {t.hero.titlePost}
@@ -127,7 +127,7 @@ function LandingContent() {
       {/* Scenarios */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
         <div className="mb-8 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-ink">
+          <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.scenarios.title}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">
@@ -164,7 +164,7 @@ function LandingContent() {
       {/* How it works */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
         <div className="mb-8 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-ink">
+          <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.how.title}
           </h2>
           <p className="mt-2 text-sm text-ink-muted">
@@ -216,7 +216,7 @@ function LandingContent() {
       {/* Features */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
         <div className="mb-8 max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-ink">
+          <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.features.title}
           </h2>
           <p className="mt-2 text-sm text-ink-muted">
@@ -255,7 +255,7 @@ function LandingContent() {
 
       {/* Final CTA */}
       <section className="mx-auto w-full max-w-6xl px-6 py-24 text-center">
-        <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tight text-ink">
+        <h2 className="mx-auto max-w-2xl font-serif text-[38px] leading-tight tracking-[-0.01em] text-ink">
           {t.finalCta.title}
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-ink-muted">
