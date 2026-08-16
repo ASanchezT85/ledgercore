@@ -166,9 +166,9 @@ const es = {
       },
       {
         name: "Escala",
-        price: "A convenir",
-        included: "Volumen alto",
-        overage: "Menos de USD 0,004 por transacción",
+        price: "Desde USD 2.500/mes",
+        included: "500.000 transacciones incluidas",
+        overage: "Luego USD 0,004 por transacción",
       },
     ],
     notes: [
@@ -455,9 +455,9 @@ const en: typeof es = {
       },
       {
         name: "Scale",
-        price: "Let's talk",
-        included: "High volume",
-        overage: "Under USD 0.004 per transaction",
+        price: "From USD 2,500/mo",
+        included: "500,000 transactions included",
+        overage: "Then USD 0.004 per transaction",
       },
     ],
     notes: [
