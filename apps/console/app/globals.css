@@ -62,6 +62,37 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Anillo de foco de teclado.
+ *
+ * Va deliberadamente FUERA de @layer: en la cascada de capas lo no-estratificado
+ * gana a las utilidades de Tailwind, y hace falta, porque hay `outline-none`
+ * sueltos en los inputs de login, signup y moderación que hoy los dejan sin
+ * ningún indicador de foco.
+ *
+ * `outline-offset` no es cosmético: separa el anillo del elemento para que sobre
+ * el CTA primario — que ya es color acento — el anillo caiga sobre el fondo
+ * oscuro y no desaparezca contra su propio botón.
+ */
+:focus-visible {
+  /*
+   * Anillo por box-shadow, no por outline. `outline-color` está en la lista de
+   * `transition-colors` de Tailwind v4 y en esta app se queda clavado en
+   * `currentColor`: el width y el offset de la regla sí aplican, el color no —
+   * da igual literal o var(), shorthand o longhand. El síntoma grave era el CTA
+   * primario, que al ser `text-[#03150e]` sobre fondo acento dibujaba el anillo
+   * casi negro sobre el canvas: contraste 1.06, o sea invisible.
+   *
+   * Dos capas a propósito: la oscura separa el anillo del elemento (hace de
+   * `outline-offset`) y es la que lo mantiene visible cuando el elemento tiene
+   * fondo claro, como el CTA acento.
+   */
+  outline: none;
+  box-shadow:
+    0 0 0 2px #05090f,
+    0 0 0 4px #e6edf6;
+}
+
 /* Monetary values always use tabular numerals. */
 .num {
   font-variant-numeric: tabular-nums;
