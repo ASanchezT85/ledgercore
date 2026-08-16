@@ -165,8 +165,12 @@ const es = {
         overage: "Luego USD 0,008 por transacción",
       },
       {
-        name: "Escala",
-        price: "Desde USD 2.500/mes",
+        // "desde" va en la etiqueta y no en el precio: pegado al monto hacía
+        // que la cuarta columna se partiera en dos líneas y desalineara todo
+        // lo de abajo — justo en el tramo más caro, donde más importa que el
+        // ojo compare limpio.
+        name: "Escala · desde",
+        price: "USD 2.500/mes",
         included: "500.000 transacciones incluidas",
         overage: "Luego USD 0,004 por transacción",
       },
@@ -454,8 +458,8 @@ const en: typeof es = {
         overage: "Then USD 0.008 per transaction",
       },
       {
-        name: "Scale",
-        price: "From USD 2,500/mo",
+        name: "Scale · from",
+        price: "USD 2,500/mo",
         included: "500,000 transactions included",
         overage: "Then USD 0.004 per transaction",
       },
