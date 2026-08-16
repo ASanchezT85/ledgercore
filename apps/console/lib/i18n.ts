@@ -144,20 +144,36 @@ const es = {
   pricing: {
     title: "Cuánto cuesta",
     subtitle:
-      "Todavía no hay lista de precios pública. Decirlo es más honesto que inventar una.",
-    items: [
+      "Se cobra por transacción asentada. Las cuentas, las lecturas de saldo y los webhooks no se miden: cobrarte por cuenta sería penalizarte por modelar bien tu dinero.",
+    tiers: [
       {
-        term: "El sandbox es gratis, y va a seguir siéndolo",
-        body: "API completa, sin tarjeta. No es una prueba con fecha de vencimiento: es donde averiguas si esto te sirve.",
+        name: "Sandbox",
+        price: "Gratis",
+        included: "API completa, sin tarjeta",
+        overage: "Sin fecha de vencimiento",
       },
       {
-        term: "En producción se cobra por transacción asentada",
-        body: "Nada más. Las cuentas, las lecturas de saldo y los webhooks no se miden. Si cobráramos por cuenta, te estaríamos penalizando por modelar bien tu dinero.",
+        name: "Arranque",
+        price: "USD 400/mes",
+        included: "25.000 transacciones incluidas",
+        overage: "Luego USD 0,015 por transacción",
       },
       {
-        term: "Hoy trabajamos con un grupo chico de equipos",
-        body: "El precio se define en esa conversación, contra lo que hoy te cuesta sostener tu ledger a mano. Si ya estás moviendo dinero en serio, hablemos.",
+        name: "Crecimiento",
+        price: "USD 1.200/mes",
+        included: "150.000 transacciones incluidas",
+        overage: "Luego USD 0,008 por transacción",
       },
+      {
+        name: "Escala",
+        price: "A convenir",
+        included: "Volumen alto",
+        overage: "Menos de USD 0,004 por transacción",
+      },
+    ],
+    notes: [
+      "Las reversiones no se cobran. Revertir es corregir, y cobrar por corregir empuja a no corregir.",
+      "Estamos en etapa temprana y trabajando de cerca con los primeros equipos. Si tu caso no entra en ningún tramo, hablemos.",
     ],
   },
   finalCta: {
@@ -416,20 +432,37 @@ const en: typeof es = {
   ],
   pricing: {
     title: "What it costs",
-    subtitle: "There's no public price list yet. Saying so beats inventing one.",
-    items: [
+    subtitle:
+      "You pay per posted transaction. Accounts, balance reads and webhook deliveries aren't metered: charging per account would penalise you for modelling your money properly.",
+    tiers: [
       {
-        term: "The sandbox is free, and it stays free",
-        body: "Full API, no card. Not a trial with an expiry date — it's where you find out whether this is for you.",
+        name: "Sandbox",
+        price: "Free",
+        included: "Full API, no card",
+        overage: "No expiry date",
       },
       {
-        term: "In production you pay per posted transaction",
-        body: "That's it. Accounts, balance reads and webhook deliveries aren't metered. Charging per account would penalise you for modelling your money properly.",
+        name: "Starter",
+        price: "USD 400/mo",
+        included: "25,000 transactions included",
+        overage: "Then USD 0.015 per transaction",
       },
       {
-        term: "Right now we work with a small group of teams",
-        body: "Price gets set in that conversation, against what your ledger costs you to maintain by hand today. If you're already moving real money, let's talk.",
+        name: "Growth",
+        price: "USD 1,200/mo",
+        included: "150,000 transactions included",
+        overage: "Then USD 0.008 per transaction",
       },
+      {
+        name: "Scale",
+        price: "Let's talk",
+        included: "High volume",
+        overage: "Under USD 0.004 per transaction",
+      },
+    ],
+    notes: [
+      "Reversals aren't charged. Reversing is correcting, and charging for corrections pushes people not to correct.",
+      "We're early and working closely with our first teams. If your case doesn't fit a tier, let's talk.",
     ],
   },
   finalCta: {
