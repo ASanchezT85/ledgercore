@@ -137,7 +137,15 @@ body {
     .lc-reveal {
       animation: lc-rise 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
       animation-timeline: view();
-      animation-range: entry 0% entry 40%;
+      /*
+       * El rango va sobre `cover`, no sobre `entry`. La fase `entry` termina
+       * cuando el sujeto acaba de entrar, asi que para una cabecera de ~60px
+       * dura ~60px de scroll: con `entry 40%` el revelado se completaba en unos
+       * 24px, o sea un pop-in que no se percibe como movimiento. `cover` abarca
+       * todo el rato que el sujeto solapa el viewport (~alto de pantalla + alto
+       * del sujeto), asi que un 20% son ~180px de scroll y da tiempo a verlo.
+       */
+      animation-range: cover 0% cover 20%;
     }
   }
 }
