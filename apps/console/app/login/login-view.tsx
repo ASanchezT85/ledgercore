@@ -67,7 +67,7 @@ function LoginForm() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={c.apiKeyPlaceholder}
-              className="w-full bg-transparent font-mono text-sm text-ink outline-none placeholder:font-sans placeholder:text-ink-faint"
+              className="w-full bg-transparent font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-faint"
               autoComplete="off"
               spellCheck={false}
               aria-label={c.apiKeyLabel}

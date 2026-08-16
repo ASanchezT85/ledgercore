@@ -149,7 +149,7 @@ function SignupContent() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder={s.emailPlaceholder}
-                      className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+                      className="w-full bg-transparent text-sm text-ink placeholder:text-ink-faint"
                     />
                   </span>
                 </label>
@@ -167,7 +167,7 @@ function SignupContent() {
                       value={company}
                       onChange={(e) => setCompany(e.target.value)}
                       placeholder={s.companyPlaceholder}
-                      className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+                      className="w-full bg-transparent text-sm text-ink placeholder:text-ink-faint"
                     />
                   </span>
                 </label>

@@ -27,7 +27,7 @@ const STATUS_OPTIONS: Array<{ value: TransactionStatus | "all"; label: string }>
   ];
 
 const SELECT_CLASSES =
-  "h-9 rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 text-xs text-ink outline-none transition-colors focus-visible:border-accent/60";
+  "h-9 rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 text-xs text-ink transition-colors focus-visible:border-accent/60";
 
 export function TransactionsExplorer({
   transactions,

@@ -88,7 +88,7 @@ function CommentForm({
           placeholder={c.namePlaceholder}
           maxLength={60}
           aria-label={c.nameLabel}
-          className="w-full rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent/60"
+          className="w-full rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent/60"
         />
         <textarea
           value={body}
@@ -97,7 +97,7 @@ function CommentForm({
           rows={compact ? 3 : 4}
           maxLength={4000}
           aria-label={c.bodyLabel}
-          className="w-full resize-y rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2 text-sm leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent/60"
+          className="w-full resize-y rounded-(--radius-control) border border-edge-strong bg-surface-raised px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-ink-faint focus:border-accent/60"
         />
 
         {/* Honeypot: hidden from humans and from screen readers. */}

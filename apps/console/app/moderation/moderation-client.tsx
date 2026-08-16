@@ -82,7 +82,7 @@ function TokenGate({ onAuthed }: { onAuthed: (token: string) => void }) {
               autoComplete="off"
               spellCheck={false}
               aria-label={c.tokenLabel}
-              className="w-full bg-transparent font-mono text-sm text-ink outline-none placeholder:font-sans placeholder:text-ink-faint"
+              className="w-full bg-transparent font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-faint"
             />
           </span>
         </label>
