@@ -83,18 +83,18 @@ function LandingContent() {
 
       {/* Hero */}
       <section className="mx-auto w-full max-w-6xl px-6 pt-16 pb-24 sm:pt-24">
-        <p className="mb-5 text-xs font-medium tracking-widest text-ink-faint uppercase">
+        <p className="lc-enter mb-5 text-xs font-medium tracking-widest text-ink-faint uppercase">
           {t.hero.badge}
         </p>
-        <h1 className="max-w-3xl font-serif text-[42px] leading-[1.1] tracking-[-0.01em] text-ink sm:text-[56px]">
+        <h1 className="lc-enter max-w-3xl font-serif text-[42px] leading-[1.1] tracking-[-0.01em] text-ink [--lc-delay:60ms] sm:text-[56px]">
           {t.hero.titlePre}
           <span className="text-accent">{t.hero.titleHighlight}</span>
           {t.hero.titlePost}
         </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted">
+        <p className="lc-enter mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted [--lc-delay:120ms]">
           {t.hero.subtitle}
         </p>
-        <div className="mt-9 flex flex-wrap items-center gap-3">
+        <div className="lc-enter mt-9 flex flex-wrap items-center gap-3 [--lc-delay:180ms]">
           <CtaPrimary href="/signup">{t.hero.ctaPrimary}</CtaPrimary>
           <CtaSecondary href="/dashboard">{t.hero.ctaSecondary}</CtaSecondary>
         </div>
@@ -126,7 +126,7 @@ function LandingContent() {
 
       {/* Scenarios */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 max-w-2xl">
+        <div className="lc-reveal mb-8 max-w-2xl">
           <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.scenarios.title}
           </h2>
@@ -163,7 +163,7 @@ function LandingContent() {
 
       {/* How it works */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 max-w-2xl">
+        <div className="lc-reveal mb-8 max-w-2xl">
           <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.how.title}
           </h2>
@@ -215,7 +215,7 @@ function LandingContent() {
 
       {/* Features */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 max-w-2xl">
+        <div className="lc-reveal mb-8 max-w-2xl">
           <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.features.title}
           </h2>
@@ -237,7 +237,7 @@ function LandingContent() {
 
       {/* Pricing */}
       <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="mb-8 max-w-2xl">
+        <div className="lc-reveal mb-8 max-w-2xl">
           <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
             {t.pricing.title}
           </h2>

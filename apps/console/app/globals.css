@@ -93,6 +93,55 @@ body {
     0 0 0 4px #e6edf6;
 }
 
+/*
+ * Movimiento.
+ *
+ * Todo vive dentro de `no-preference`: con `prefers-reduced-motion: reduce`
+ * las clases no hacen absolutamente nada. Por eso el estado BASE es el visible
+ * y los keyframes arrancan desde oculto, nunca al reves — si la animacion no
+ * corre, el contenido esta ahi igual. Una entrada que esconde contenido cuando
+ * falla es un bug de contenido, no un detalle de diseño.
+ *
+ * Solo se animan `opacity` y `transform`: las dos que no disparan layout.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes lc-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  /* Entrada del hero. El escalonado no es adorno: ordena la lectura
+     (etiqueta → titular → subtitulo → acciones). */
+  /*
+   * El escalonado entra por custom property, no por la utilidad
+   * `[animation-delay:*]` de Tailwind: esta regla va sin capa y el shorthand
+   * `animation` resetea `animation-delay`, asi que le ganaria siempre a la
+   * utilidad y todo arrancaria a la vez. Con la variable no hay conflicto,
+   * porque esta regla nunca declara `--lc-delay`.
+   */
+  .lc-enter {
+    animation: lc-rise 500ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: var(--lc-delay, 0ms);
+  }
+
+  /*
+   * Revelado al entrar en viewport, con timeline de scroll nativo — sin JS.
+   * Dentro de @supports a proposito: donde no haya `animation-timeline`, la
+   * regla entera se descarta y las cabeceras se ven de una, que es el
+   * comportamiento correcto. Sin el @supports la animacion caeria al timeline
+   * del documento y dispararia todo a la vez al cargar.
+   */
+  @supports (animation-timeline: view()) {
+    .lc-reveal {
+      animation: lc-rise 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+}
+
 /* Monetary values always use tabular numerals. */
 .num {
   font-variant-numeric: tabular-nums;
