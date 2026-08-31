@@ -130,6 +130,34 @@ never be reused. The repository's deploy key was revoked; it now has zero.
 
 Detail: [`SECRET_AUDIT.md`](SECRET_AUDIT.md).
 
+### A compromised container, resolved by the teardown
+
+While this transition was in progress, a **cryptominer was found running inside
+the `ledgercore-console` container** on the retired VPS — a process with a
+falsified `argv` (`redis-server`, on a host with no Redis), its binary already
+unlinked from disk, holding 1.2 GB of RAM and two established outbound HTTPS
+connections. It was starving the host.
+
+Retiring the deployment removed it: the container and its image are gone, and the
+host was verified afterwards — no such process, no connections to either remote
+address, no `ld.so.preload`, nothing planted in `/tmp` or `/dev/shm`,
+`authorized_keys` unchanged. Free memory went from 88 MB to 1 054 MB and load
+average to 0.00.
+
+**The likely entry vector is relevant to this repository.** The console's blog
+comment endpoint was the only unauthenticated write path in the product. That
+subsystem — the blog, its API routes, its schema and its database role — has been
+**removed from the codebase entirely**, so the surface no longer exists in what
+would be published. The credentials that container held
+(`BLOG_ADMIN_TOKEN`, `BLOG_HASH_SALT`, `BLOG_DATABASE_URL`) died with the schema
+and the role; there is nothing to rotate.
+
+This does not mean the code is proven safe: an unauthenticated write path that
+led to remote code execution was never root-caused, because the evidence was
+inside a container that has been destroyed. It is recorded here so nobody reads
+"the blog was removed for tidiness". It was removed because it was the anonymous
+write surface, and something got in through that deployment.
+
 ## IP findings
 
 **No third-party code.** LedgerCore is greenfield — nothing copied from any prior
