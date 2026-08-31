@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="400" viewBox="0 0 1600 400" role="img" aria-label="LedgerCore, open-source double-entry ledger. A posted transaction: a USD 100.00 deposit debited to assets colon cash, credited 97.00 to the customer wallet and 3.00 to fee revenue. Debits equal credits, so the transaction posts.">
+  <rect width="1600" height="400" fill="#0f172a"/>
+
+  <!-- mark: two columns of a ledger, meeting at a balanced rule -->
+  <g transform="translate(64,150)">
+    <rect x="0"  y="0"  width="26" height="46" rx="3" fill="none" stroke="#10b981" stroke-width="4"/>
+    <rect x="38" y="0"  width="26" height="46" rx="3" fill="none" stroke="#10b981" stroke-width="4"/>
+    <rect x="0"  y="58" width="64" height="5"  rx="2.5" fill="#10b981"/>
+  </g>
+
+  <text x="152" y="176" font-family="Inter, Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="60" font-weight="700" fill="#f1f5f9">LedgerCore</text>
+  <text x="155" y="214" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="23" fill="#94a3b8">Open-source double-entry ledger</text>
+  <rect x="155" y="236" width="104" height="3" fill="#10b981"/>
+  <text x="155" y="286" font-family="Inter, Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#e2e8f0">The invariants are enforced by PostgreSQL,</text>
+  <text x="155" y="314" font-family="Inter, Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#e2e8f0">not by application code.</text>
+
+  <!-- the transaction: the same deposit the README quickstart posts -->
+  <text x="720" y="86" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b" letter-spacing="1.4">TRANSACTION · POSTED · USD</text>
+
+  <line x1="720" y1="104" x2="1536" y2="104" stroke="#1e293b" stroke-width="2"/>
+
+  <!-- column headings -->
+  <text x="1214" y="134" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b" letter-spacing="1.2">DEBIT</text>
+  <text x="1420" y="134" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b" letter-spacing="1.2">CREDIT</text>
+
+  <!-- row 1 -->
+  <text x="720"  y="180" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" fill="#e2e8f0">assets:cash</text>
+  <text x="1214" y="180" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" fill="#f1f5f9">100.00</text>
+
+  <!-- row 2 -->
+  <text x="720"  y="222" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" fill="#e2e8f0">liabilities:customer:wallet</text>
+  <text x="1420" y="222" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" fill="#f1f5f9">97.00</text>
+
+  <!-- row 3 -->
+  <text x="720"  y="264" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" fill="#e2e8f0">revenue:fees</text>
+  <text x="1420" y="264" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" fill="#f1f5f9">3.00</text>
+
+  <!-- the totals rule -->
+  <line x1="1120" y1="288" x2="1420" y2="288" stroke="#334155" stroke-width="2"/>
+  <text x="1214" y="322" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" font-weight="700" fill="#10b981">100.00</text>
+  <text x="1420" y="322" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" font-weight="700" fill="#10b981">100.00</text>
+
+  <text x="720" y="322" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#10b981">Σ debits = Σ credits</text>
+
+  <text x="720" y="356" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#64748b">otherwise the COMMIT is refused — by the database, not by the API</text>
+</svg>

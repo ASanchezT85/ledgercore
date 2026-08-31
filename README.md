@@ -1,10 +1,19 @@
 # LedgerCore
 
+![LedgerCore — open-source double-entry ledger](docs/banner.svg)
+
 **Open-source double-entry ledger service for building auditable financial systems.**
 
 Post balanced transactions, place holds on funds, reverse mistakes without
 rewriting history, and derive every balance from the postings that produced it.
 The accounting invariants are enforced by PostgreSQL, not by application code.
+
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-0f172a?logo=go&logoColor=white)](https://go.dev)
+[![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-10b981?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![NATS JetStream](https://img.shields.io/badge/NATS-JetStream-10b981?logo=natsdotio&logoColor=white)](https://nats.io)
+[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-10b981)](contracts/openapi)
+[![license](https://img.shields.io/badge/license-Apache--2.0-1e6b3a)](LICENSE)
+[![status](https://img.shields.io/badge/status-early--stage%20%C2%B7%20pre--1.0-8a5a00)](#limitations)
 
 > **Status: early-stage, pre-1.0, reference implementation.**
 > LedgerCore is not a regulated financial product and has not been through
