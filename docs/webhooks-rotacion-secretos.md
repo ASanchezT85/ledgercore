@@ -1,6 +1,6 @@
 # Rotación de secretos de webhook (con período de gracia)
 
-Cada suscripción de webhook tiene un secreto de firma (`whsec_…`) con el que
+Cada suscripción de webhook tiene un secreto de firma (`lcwh_…`) con el que
 LedgerCore firma cada entrega:
 
 ```
@@ -25,7 +25,7 @@ timestamps fuera de su ventana de tolerancia (recomendado: 5 minutos).
    ```json
    {
      "id": "…",
-     "secret": "whsec_NUEVO…",
+     "secret": "lcwh_NUEVO…",
      "previous_secret_expires_at": "2026-07-25T12:00:00Z"
    }
    ```

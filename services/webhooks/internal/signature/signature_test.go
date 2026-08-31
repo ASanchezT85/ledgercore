@@ -9,8 +9,12 @@ import (
 )
 
 // Known vectors computed with an independent HMAC-SHA256 implementation
-// (.NET System.Security.Cryptography.HMACSHA256). They freeze the signing
-// scheme: any change that breaks these breaks every client SDK.
+// (Python's stdlib hmac/hashlib, not the code under test). They freeze the
+// signing scheme: any change that breaks these breaks every client SDK.
+//
+// Recomputed when the secret prefix moved from "whsec_" to "lcwh_": the secret
+// IS the HMAC key, so changing it necessarily changes every signature. These
+// tests caught that, which is what a known-answer test is for.
 var knownVectors = []struct {
 	name   string
 	secret string
@@ -20,24 +24,24 @@ var knownVectors = []struct {
 }{
 	{
 		name:   "json body",
-		secret: "whsec_8Zt5xVcbXkO2qWm1nJp3rTyUuIoPaSdF",
+		secret: "lcwh_8Zt5xVcbXkO2qWm1nJp3rTyUuIoPaSdF",
 		t:      1700000000,
 		body:   `{"hello":"world"}`,
-		hexSig: "8d6e0eb1234ad908a934b80aa71636746c86da516c1d12f3a66edb3e9bc537ec",
+		hexSig: "58aa98444a24e97e8d9fa484e79ed0062fb53048d2597e27ee8c79d3a6bf58a3",
 	},
 	{
 		name:   "empty object",
-		secret: "whsec_00000000000000000000000000000000",
+		secret: "lcwh_00000000000000000000000000000000",
 		t:      1234567890,
 		body:   `{}`,
-		hexSig: "b988dac0a23f72be1f0f5fd147fd90e558dbf3d5d7e0730f1499d25286b65dd8",
+		hexSig: "8e96e7220c92ab23d735e9fe35f56053037536afee89c643df77cf5d8cb3d812",
 	},
 	{
 		name:   "empty body",
-		secret: "whsec_abc",
+		secret: "lcwh_abc",
 		t:      1700000001,
 		body:   "",
-		hexSig: "42f72bb46eeb920af976bd4e57d8635840971c464e6e42d71ee488efdb55ef2a",
+		hexSig: "18e3a3997f57d9948422c5cfb8c42ac2852a173b6cc97e3a0a7144134d352246",
 	},
 }
 
@@ -97,7 +101,7 @@ func TestVerifyRejectsWrongSecret(t *testing.T) {
 	v := knownVectors[0]
 	header := Header(v.secret, v.t, []byte(v.body))
 	now := time.Unix(v.t, 0)
-	if err := VerifyAt("whsec_other", header, []byte(v.body), now, DefaultTolerance); !errors.Is(err, ErrSignatureMismatch) {
+	if err := VerifyAt("lcwh_other", header, []byte(v.body), now, DefaultTolerance); !errors.Is(err, ErrSignatureMismatch) {
 		t.Fatalf("want ErrSignatureMismatch for wrong secret, got %v", err)
 	}
 }

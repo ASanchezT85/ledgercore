@@ -14,7 +14,7 @@ const RESP_SUB = `{
   "event_types": ["ledger.transaction.posted", "ledger.transaction.reversed"],
   "active": true,
   "created_at": "2026-07-24T12:00:00Z",
-  "secret": "whsec_4f3e2d1c0b9a"
+  "secret": "lcwh_4f3e2d1c0b9a"
 }`;
 
 const HEADER_EXAMPLE = `X-LedgerCore-Signature: t=1753358400,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd
@@ -30,7 +30,7 @@ const lc = new LedgerCore({ apiKey: "lk_..." });
 const ok = await lc.webhooks.verifySignature(
   rawBody,
   req.headers["x-ledgercore-signature"],
-  "whsec_...",
+  "lcwh_...",
 );
 if (!ok) return res.status(400).end();`;
 
@@ -61,7 +61,7 @@ $rawBody = file_get_contents('php://input'); // cuerpo crudo, SIEMPRE
 $ok = Webhook::verifySignature(
     $rawBody,
     $_SERVER['HTTP_X_LEDGERCORE_SIGNATURE'] ?? null,
-    'whsec_...',
+    'lcwh_...',
 );
 if (!$ok) {
     http_response_code(400);
@@ -73,7 +73,7 @@ const CURL_ROTATE = `curl -s -X POST $API/v1/webhook-subscriptions/$SUB_ID/rotat
 
 const RESP_ROTATE = `{
   "id": "…",
-  "secret": "whsec_NUEVO…",
+  "secret": "lcwh_NUEVO…",
   "previous_secret_expires_at": "2026-07-25T12:00:00Z"
 }`;
 
@@ -89,7 +89,7 @@ export const GUIDE: GuideContent = {
     sections: [
       {
         title: "Crea la suscripción",
-        body: "Registra tu endpoint y los tipos de evento (ledger.transaction.posted, ledger.transaction.reversed, ledger.hold.*, recon.discrepancy.detected…). El secreto de firma whsec_… se devuelve UNA sola vez: guárdalo de inmediato. En el entorno live la URL debe ser HTTPS. Las entregas fallidas se reintentan con backoff exponencial (5 intentos, luego dead; un retry manual las re-encola).",
+        body: "Registra tu endpoint y los tipos de evento (ledger.transaction.posted, ledger.transaction.reversed, ledger.hold.*, recon.discrepancy.detected…). El secreto de firma lcwh_… se devuelve UNA sola vez: guárdalo de inmediato. En el entorno live la URL debe ser HTTPS. Las entregas fallidas se reintentan con backoff exponencial (5 intentos, luego dead; un retry manual las re-encola).",
         blocks: [
           { kind: "code", label: "POST /v1/webhook-subscriptions", code: CURL_SUB },
           { kind: "resp", label: "Respuesta (201) — el secreto se muestra una sola vez", code: RESP_SUB },
@@ -138,7 +138,7 @@ export const GUIDE: GuideContent = {
     sections: [
       {
         title: "Create the subscription",
-        body: "Register your endpoint and the event types (ledger.transaction.posted, ledger.transaction.reversed, ledger.hold.*, recon.discrepancy.detected…). The whsec_… signing secret is returned exactly ONCE: store it immediately. In the live environment the URL must be HTTPS. Failed deliveries are retried with exponential backoff (5 attempts, then dead; a manual retry re-enqueues them).",
+        body: "Register your endpoint and the event types (ledger.transaction.posted, ledger.transaction.reversed, ledger.hold.*, recon.discrepancy.detected…). The lcwh_… signing secret is returned exactly ONCE: store it immediately. In the live environment the URL must be HTTPS. Failed deliveries are retried with exponential backoff (5 attempts, then dead; a manual retry re-enqueues them).",
         blocks: [
           { kind: "code", label: "POST /v1/webhook-subscriptions", code: CURL_SUB },
           { kind: "resp", label: "Response (201) — the secret is shown exactly once", code: RESP_SUB },

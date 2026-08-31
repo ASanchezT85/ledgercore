@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 
 final class WebhookTest extends TestCase
 {
-    private const SECRET = 'whsec_4f3e2d1c0b9a';
+    private const SECRET = 'lcwh_4f3e2d1c0b9a';
     private const T = 1753000000;
 
     private string $body;
@@ -33,7 +33,7 @@ final class WebhookTest extends TestCase
     public function testAcceptsAnyMatchingCandidateDuringRotation(): void
     {
         $header = 't=' . self::T
-            . ',v1=' . self::sign('whsec_old', self::T, $this->body)
+            . ',v1=' . self::sign('lcwh_old', self::T, $this->body)
             . ',v1=' . self::sign(self::SECRET, self::T, $this->body);
         self::assertTrue(Webhook::verifySignature($this->body, $header, self::SECRET, now: self::T));
     }
@@ -53,7 +53,7 @@ final class WebhookTest extends TestCase
     public function testRejectsWrongSecret(): void
     {
         $header = 't=' . self::T . ',v1=' . self::sign(self::SECRET, self::T, $this->body);
-        self::assertFalse(Webhook::verifySignature($this->body, $header, 'whsec_other', now: self::T));
+        self::assertFalse(Webhook::verifySignature($this->body, $header, 'lcwh_other', now: self::T));
     }
 
     public function testRejectsStaleTimestampOutsideTolerance(): void

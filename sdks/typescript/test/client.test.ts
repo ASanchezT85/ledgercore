@@ -247,13 +247,13 @@ describe("webhooks", () => {
       () =>
         json(200, {
           id: "ws1",
-          secret: "whsec_new",
+          secret: "lcwh_new",
           previous_secret_expires_at: "2026-07-29T12:00:00Z",
         }),
     ]);
     const lc = new LedgerCore({ apiKey: KEY, baseUrl: "http://api.test", fetch: fetchMock });
     const rotated = await lc.webhooks.rotateSecret("ws1");
     expect(rotated.previous_secret_expires_at).toBe("2026-07-29T12:00:00Z");
-    expect(rotated.secret).toBe("whsec_new");
+    expect(rotated.secret).toBe("lcwh_new");
   });
 });

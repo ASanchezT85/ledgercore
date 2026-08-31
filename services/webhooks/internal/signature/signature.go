@@ -6,7 +6,7 @@
 //	X-LedgerCore-Signature: t=<unix seconds>,v1=<hex hmac-sha256>
 //
 // where the MAC input is "<t>." followed by the raw request body, keyed with
-// the subscription secret (whsec_...). Receivers must recompute the MAC over
+// the subscription secret (lcwh_...). Receivers must recompute the MAC over
 // the exact bytes they received and compare in constant time, and should
 // reject timestamps outside their tolerance window to prevent replay.
 package signature

@@ -18,7 +18,7 @@ func newCipher(t *testing.T) *Cipher {
 
 func TestRoundTrip(t *testing.T) {
 	c := newCipher(t)
-	const secret = "whsec_8Zt5xVcbXkO2qWm1nJp3rTyUuIoPaSdF"
+	const secret = "lcwh_8Zt5xVcbXkO2qWm1nJp3rTyUuIoPaSdF"
 	const aad = "11111111-1111-1111-1111-111111111111"
 
 	blob, err := c.Encrypt(secret, aad)
@@ -42,7 +42,7 @@ func TestRoundTrip(t *testing.T) {
 
 func TestDecryptWrongAAD(t *testing.T) {
 	c := newCipher(t)
-	blob, err := c.Encrypt("whsec_x", "sub-a")
+	blob, err := c.Encrypt("lcwh_x", "sub-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestDecryptWrongAAD(t *testing.T) {
 
 func TestDecryptWrongMasterKey(t *testing.T) {
 	c := newCipher(t)
-	blob, err := c.Encrypt("whsec_x", "sub")
+	blob, err := c.Encrypt("lcwh_x", "sub")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,18 +70,18 @@ func TestDecryptWrongMasterKey(t *testing.T) {
 func TestDecryptPlaintextPassthrough(t *testing.T) {
 	c := newCipher(t)
 	// Legacy plaintext (no prefix) is returned verbatim.
-	got, err := c.Decrypt("whsec_legacy", "sub")
+	got, err := c.Decrypt("lcwh_legacy", "sub")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "whsec_legacy" {
+	if got != "lcwh_legacy" {
 		t.Fatalf("plaintext passthrough failed: %q", got)
 	}
 }
 
 func TestDecryptEncryptedWithoutKeyFails(t *testing.T) {
 	c := newCipher(t)
-	blob, err := c.Encrypt("whsec_x", "sub")
+	blob, err := c.Encrypt("lcwh_x", "sub")
 	if err != nil {
 		t.Fatal(err)
 	}

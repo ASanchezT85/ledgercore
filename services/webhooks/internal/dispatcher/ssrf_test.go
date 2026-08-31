@@ -52,7 +52,7 @@ func TestSafeClientRejectsLoopback(t *testing.T) {
 	defer srv.Close()
 
 	client := newSafeClient(2 * time.Second)
-	c := claimed(srv.URL, "whsec_x") // srv.URL is 127.0.0.1:PORT
+	c := claimed(srv.URL, "lcwh_x") // srv.URL is 127.0.0.1:PORT
 	_, err := Send(context.Background(), client, c)
 	if err == nil {
 		t.Fatal("expected the SSRF guard to block a loopback delivery")

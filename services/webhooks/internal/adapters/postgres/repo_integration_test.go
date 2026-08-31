@@ -129,7 +129,7 @@ func TestRepoEndToEnd(t *testing.T) {
 		ID:         uuid.New(),
 		TenantID:   tenantID,
 		URL:        "https://client.example.com/hooks",
-		Secret:     "whsec_integrationtestsecret00000000",
+		Secret:     "lcwh_integrationtestsecret00000000",
 		EventTypes: []string{"ledger.transaction.posted", "*"},
 		Active:     true,
 		CreatedAt:  time.Now().UTC(),
@@ -244,11 +244,11 @@ func TestRepoEndToEnd(t *testing.T) {
 	// grace deadline, and the purge must clear it once expired.
 	oldSecret := got.Secret
 	prevExpires := time.Now().UTC().Add(domain.RotationGrace)
-	if err := repo.RotateSecret(ctx, tenantID, sub.ID, "whsec_rotated0000000000000000000000", prevExpires); err != nil {
+	if err := repo.RotateSecret(ctx, tenantID, sub.ID, "lcwh_rotated0000000000000000000000", prevExpires); err != nil {
 		t.Fatalf("rotate secret: %v", err)
 	}
 	got, err = repo.Get(ctx, tenantID, sub.ID)
-	if err != nil || got.Secret != "whsec_rotated0000000000000000000000" {
+	if err != nil || got.Secret != "lcwh_rotated0000000000000000000000" {
 		t.Fatalf("secret not rotated: %v (%+v)", err, got)
 	}
 	if got.PreviousSecret == nil || *got.PreviousSecret != oldSecret || got.PreviousSecretExpiresAt == nil {

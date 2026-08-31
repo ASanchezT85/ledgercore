@@ -138,7 +138,7 @@ func TestIsDead(t *testing.T) {
 }
 
 func TestNewSecretFormat(t *testing.T) {
-	pattern := regexp.MustCompile(`^whsec_[0-9A-Za-z]{32}$`)
+	pattern := regexp.MustCompile(`^lcwh_[0-9A-Za-z]{32}$`)
 	seen := map[string]struct{}{}
 	for i := 0; i < 50; i++ {
 		s, err := domain.NewSecret()

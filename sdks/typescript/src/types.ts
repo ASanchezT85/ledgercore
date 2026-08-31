@@ -217,7 +217,7 @@ export interface WebhookSubscriptionUpdateParams {
 /** Response of POST /v1/webhook-subscriptions/{id}/rotate-secret. */
 export interface RotatedSecret {
   id: string;
-  /** The new whsec_... secret, shown exactly once. */
+  /** The new lcwh_... secret, shown exactly once. */
   secret: string;
   /** Until this instant deliveries are also signed with the previous secret (24h grace). */
   previous_secret_expires_at: string;

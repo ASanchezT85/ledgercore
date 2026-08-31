@@ -6,7 +6,7 @@
 # What is allowlisted and why:
 #   - Example credential shapes used throughout docs/specs/SDK snippets:
 #       lk_sandbox_… / lk_live_…  (illustrative API keys)
-#       whsec_…                    (illustrative webhook secrets)
+#       lcwh_…                    (illustrative webhook secrets)
 #     These are placeholders, never issued.
 #   - Test fixtures: hardcoded AES master keys used only to exercise the
 #     encryption round-trip in *_test.go / *.test.ts / *Test.php.
@@ -24,7 +24,7 @@ useDefault = true
 description = "Documented example credentials and encryption test fixtures"
 regexes = [
   '''lk_(sandbox|live)_[A-Za-z0-9_]+''',
-  '''whsec_[A-Za-z0-9_]+''',
+  '''lcwh_[A-Za-z0-9_]+''',
   # Test-only master keys: named constants in encryption unit tests.
   '''(?i)(crypt)?test[_]?master[_]?key\s*[:=]\s*"?[0-9a-f]{32,64}"?''',
 ]

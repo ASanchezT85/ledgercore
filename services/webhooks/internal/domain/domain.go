@@ -126,8 +126,14 @@ func ValidateEndpointURL(raw string, requireHTTPS bool) error {
 
 // ---- Secrets ---------------------------------------------------------------------
 
-// SecretPrefix identifies LedgerCore webhook secrets (Stripe-style whsec_).
-const SecretPrefix = "whsec_"
+// SecretPrefix identifies LedgerCore webhook secrets.
+//
+// It used to be "whsec_", copying Stripe. That collides with Stripe's own
+// format: GitHub's secret scanner types every match as a "Stripe Webhook
+// Signing Secret", so each webhook test in this repository raised a false
+// alert, and would do so again in any fork. The prefix is ours, so it now
+// says so.
+const SecretPrefix = "lcwh_"
 
 // RotationGrace is how long the previous secret keeps verifying deliveries
 // after a rotation. During the window the dispatcher signs with both secrets.
@@ -138,7 +144,7 @@ const (
 	secretLength   = 32
 )
 
-// NewSecret generates a webhook signing secret: "whsec_" followed by 32
+// NewSecret generates a webhook signing secret: SecretPrefix followed by 32
 // base62 characters drawn from crypto/rand (~190 bits of entropy).
 // Rejection-free: rand.Int is uniform over the alphabet size.
 func NewSecret() (string, error) {

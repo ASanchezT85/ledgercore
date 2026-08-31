@@ -73,7 +73,7 @@ func claimed(url, secret string) domain.ClaimedDelivery {
 }
 
 func TestSendSetsHeadersAndValidSignature(t *testing.T) {
-	const secret = "whsec_8Zt5xVcbXkO2qWm1nJp3rTyUuIoPaSdF"
+	const secret = "lcwh_8Zt5xVcbXkO2qWm1nJp3rTyUuIoPaSdF"
 	var (
 		gotBody []byte
 		gotHdr  http.Header
@@ -112,7 +112,7 @@ func TestSendSetsHeadersAndValidSignature(t *testing.T) {
 		t.Fatalf("received signature does not verify against received body: %v", err)
 	}
 	// Verify must fail with the wrong secret.
-	if err := signature.Verify("whsec_wrong", sig, gotBody, signature.DefaultTolerance); err == nil {
+	if err := signature.Verify("lcwh_wrong", sig, gotBody, signature.DefaultTolerance); err == nil {
 		t.Fatal("signature verified with the wrong secret")
 	}
 }
@@ -127,7 +127,7 @@ func TestProcessMarksDeliveredOn2xx(t *testing.T) {
 	d := New(store)
 	d.client = srv.Client()
 
-	c := claimed(srv.URL, "whsec_x")
+	c := claimed(srv.URL, "lcwh_x")
 	d.process(context.Background(), c)
 
 	if len(store.delivered) != 1 || len(store.failed) != 0 {
@@ -148,7 +148,7 @@ func TestProcessSchedulesBackoffOnFailure(t *testing.T) {
 	d := New(store)
 	d.client = srv.Client()
 
-	c := claimed(srv.URL, "whsec_x")
+	c := claimed(srv.URL, "lcwh_x")
 	c.Attempts = 1 // second attempt
 	before := time.Now().UTC()
 	d.process(context.Background(), c)
@@ -183,7 +183,7 @@ func TestProcessMarksDeadAfterMaxAttempts(t *testing.T) {
 	d := New(store)
 	d.client = srv.Client()
 
-	c := claimed(srv.URL, "whsec_x")
+	c := claimed(srv.URL, "lcwh_x")
 	c.Attempts = domain.MaxAttempts - 1 // this is the final attempt
 	d.process(context.Background(), c)
 
@@ -199,7 +199,7 @@ func TestProcessRecordsTransportError(t *testing.T) {
 	store := &fakeStore{}
 	d := New(store)
 	// Nothing listens here; connection is refused immediately.
-	c := claimed("http://127.0.0.1:1", "whsec_x")
+	c := claimed("http://127.0.0.1:1", "lcwh_x")
 	d.process(context.Background(), c)
 
 	if len(store.failed) != 1 {

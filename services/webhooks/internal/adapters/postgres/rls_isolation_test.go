@@ -36,7 +36,7 @@ func TestRLSCrossTenantIsolation(t *testing.T) {
 		ID:         uuid.New(),
 		TenantID:   tenantA,
 		URL:        "https://a.example.com/hooks",
-		Secret:     "whsec_tenantAsecret0000000000000000",
+		Secret:     "lcwh_tenantAsecret0000000000000000",
 		EventTypes: []string{"*"},
 		Active:     true,
 		CreatedAt:  time.Now().UTC(),
@@ -81,7 +81,7 @@ func TestRLSCrossTenantIsolation(t *testing.T) {
 		if _, err := repo.Update(ctx, tenantB, sub.ID, nil, nil, &active); !errors.Is(err, domain.ErrNotFound) {
 			t.Errorf("Update foreign sub: want ErrNotFound, got %v", err)
 		}
-		if err := repo.RotateSecret(ctx, tenantB, sub.ID, "whsec_hijack00000000000000000000000", time.Now().UTC().Add(time.Hour)); !errors.Is(err, domain.ErrNotFound) {
+		if err := repo.RotateSecret(ctx, tenantB, sub.ID, "lcwh_hijack00000000000000000000000", time.Now().UTC().Add(time.Hour)); !errors.Is(err, domain.ErrNotFound) {
 			t.Errorf("RotateSecret foreign sub: want ErrNotFound, got %v", err)
 		}
 		if _, err := repo.Requeue(ctx, tenantB, del.ID); !errors.Is(err, domain.ErrNotFound) {

@@ -46,7 +46,7 @@ Money::toDecimal('10050', 2);           // "100.50"
 ```php
 use LedgerCore\Webhook;
 
-$ok = Webhook::verifySignature($rawBody, $_SERVER['HTTP_X_LEDGERCORE_SIGNATURE'] ?? null, 'whsec_...');
+$ok = Webhook::verifySignature($rawBody, $_SERVER['HTTP_X_LEDGERCORE_SIGNATURE'] ?? null, 'lcwh_...');
 ```
 
 Verifica el header `X-LedgerCore-Signature` (`t=<unix>,v1=<hmac-sha256 hex>`) en tiempo constante (`hash_equals`), con ventana anti-replay de 5 minutos. El header puede traer **múltiples `v1`** (rotación de secreto: 24 h de gracia hasta `previous_secret_expires_at`, que devuelve `rotateSecret`); la verificación acepta si CUALQUIERA coincide. Usa siempre el cuerpo crudo (`file_get_contents('php://input')`), no JSON re-serializado. La superficie completa: `$lc->webhooks->create/list/listAll/get/update/rotateSecret/deliveries/deliveriesAll/retryDelivery`.

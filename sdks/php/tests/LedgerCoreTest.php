@@ -218,13 +218,13 @@ final class LedgerCoreTest extends TestCase
         $this->transport->queueToken();
         $this->transport->queue(200, [
             'id' => 'ws1',
-            'secret' => 'whsec_new',
+            'secret' => 'lcwh_new',
             'previous_secret_expires_at' => '2026-07-29T12:00:00Z',
         ]);
 
         $rotated = $this->client()->webhooks->rotateSecret('ws1');
 
-        self::assertSame('whsec_new', $rotated['secret']);
+        self::assertSame('lcwh_new', $rotated['secret']);
         self::assertSame('2026-07-29T12:00:00Z', $rotated['previous_secret_expires_at']);
     }
 

@@ -4,7 +4,7 @@
  *   X-LedgerCore-Signature: t=<unix seconds>,v1=<hex hmac-sha256>
  *
  * The MAC input is "<t>." + raw body, keyed with the subscription secret
- * (whsec_...). Mirrors services/webhooks/internal/signature (the reference
+ * (lcwh_...). Mirrors services/webhooks/internal/signature (the reference
  * implementation). Uses WebCrypto, so it works on Node 18+, workers and
  * browsers.
  */

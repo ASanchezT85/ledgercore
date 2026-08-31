@@ -46,7 +46,7 @@ from the history, so the whole commit graph was scanned:
 | `6465762d…646576` | `docker-compose.yml` | **Safe.** Hex encoding of the ASCII string `dev-only-master-key-32-bytes-dev`. Deliberately public, and the hardened overlay refuses to start with it. |
 | `a75493003c43342d…` (32 hex) | `sdks/php/composer.lock` | **Safe.** Composer's content hash. |
 | `ledgercore_*_dev` passwords | `docker-compose.yml`, tests | **Safe.** Documented development defaults. The `docker-compose.sandbox.yml` overlay declares every one of them as `${VAR:?}`, so a non-development deployment cannot boot with them. |
-| `whsec_…0000…`, `lk_sandbox_9f8e7d6c…` | tests, OpenAPI, SDK docs | **Safe.** Example credential shapes; never issued. |
+| `lcwh_…0000…`, `lk_sandbox_9f8e7d6c…` | tests, OpenAPI, SDK docs | **Safe.** Example credential shapes; never issued. |
 | `LEDGERCORE_ADMIN_TOKEN=dev-admin-token` | dev default | **Safe.** `requireHardenedSandbox()` refuses to start when `LEDGERCORE_ENV=sandbox-public` and this value is present. |
 
 ### The 82 working-tree findings
@@ -94,27 +94,46 @@ That script is why no equivalent leak has happened since.
 - `scripts/export-clean.sh` is the only sanctioned way to produce an archive of
   this repository.
 
-## GitHub secret scanning: 10 alerts, all resolved as test fixtures
+## GitHub secret scanning: 10 alerts, and the prefix collision behind them
 
 Secret scanning and push protection were enabled when the repository went
 public. It immediately raised **10 alerts, every one typed "Stripe Webhook
 Signing Secret"**, and every one located in a `_test.go` file under
 `services/webhooks/`.
 
-The cause is a prefix collision, not a leak: **LedgerCore issues its own webhook
-secrets with the `whsec_` prefix, which is also Stripe's format.** GitHub's
-scanner matches the shape and cannot tell whose secret it is. The matched values
-are hardcoded constants in tests — `whsec_00000000…`, `whsec_old0000…` and
-similar — and none was ever issued by anything.
+The cause was a prefix collision, not a leak. LedgerCore issued its own webhook
+secrets with the `lcwh_` prefix — which at the time was `whsec_`, Stripe's
+format. GitHub's scanner matches the shape and cannot tell whose secret it is,
+so every webhook test fixture in the repository looked like a leaked Stripe
+credential.
 
-All 10 were resolved as `used_in_tests` with that explanation rather than
-dismissed, so the reasoning is on the record next to each alert.
+All 10 were first resolved as `used_in_tests`, with that explanation attached to
+each alert rather than dismissed silently.
 
-**This will recur.** Any contributor adding a webhook test trips it again, and
-so does anyone who forks the project. The clean fix is to stop borrowing
-Stripe's prefix — `lcwh_` would collide with nothing — but that is a breaking
-change to a wire format already shipped in two published SDKs, so it is recorded
-here as a known wart rather than changed on the way out the door.
+**Then the underlying cause was removed.** The prefix is now `lcwh_`, defined
+once as `domain.SecretPrefix`. Borrowing another company's credential format
+meant every contributor adding a webhook test would trip the same alert, every
+fork would inherit it, and a reader could reasonably assume a Stripe
+integration that does not exist.
+
+What the change touched, and what it did not:
+
+- `domain.SecretPrefix` is the single definition; nothing else hardcodes it.
+  The one test that did — asserting plaintext never reaches the database column —
+  now references the constant, so it cannot drift again.
+- **Both SDKs were unaffected in code.** They treat the secret as an opaque HMAC
+  key and never parse the prefix; only comments and documentation examples
+  changed. No republish was needed.
+- **The signature known-answer vectors had to be recomputed.** The secret *is*
+  the HMAC key, so changing it changes every signature, and the vectors failed
+  exactly as they should have. They were recomputed with an independent
+  implementation (Python's `hmac`/`hashlib`, not the Go code under test), and
+  the first result matched what the Go implementation produced — confirming the
+  signing scheme itself was untouched.
+
+This is a **breaking change to the wire format** for anyone holding a previously
+issued secret. It was made deliberately at `v0.1.0`, before there is anyone to
+break.
 
 ## Recommendations
 

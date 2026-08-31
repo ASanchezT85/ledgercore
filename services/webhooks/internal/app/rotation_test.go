@@ -43,7 +43,7 @@ func TestRotateSecretGracePeriod(t *testing.T) {
 	subs := &fakeSubs{sub: domain.Subscription{
 		ID:       uuid.New(),
 		TenantID: uuid.New(),
-		Secret:   "whsec_old0000000000000000000000000000",
+		Secret:   "lcwh_old0000000000000000000000000000",
 	}}
 	svc := NewService(subs, nil)
 

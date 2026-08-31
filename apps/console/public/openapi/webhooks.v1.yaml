@@ -65,7 +65,7 @@ paths:
                     event_types: ['ledger.transaction.posted', 'ledger.transaction.reversed']
                     active: true
                     created_at: '2026-07-24T12:00:00Z'
-                    secret: whsec_4f3e2d1c0b9a
+                    secret: lcwh_4f3e2d1c0b9a
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     get:
@@ -188,7 +188,7 @@ paths:
                 rotated:
                   value:
                     id: a7b8c9d0-e1f2-7a3b-5c6d-7e8f9a0b1c2d
-                    secret: whsec_0a1b2c3d4e5f
+                    secret: lcwh_0a1b2c3d4e5f
                     previous_secret_expires_at: '2026-07-25T12:00:00Z'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }

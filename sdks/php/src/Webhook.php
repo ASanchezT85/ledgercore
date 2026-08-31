@@ -10,7 +10,7 @@ namespace LedgerCore;
  *   X-LedgerCore-Signature: t=<unix seconds>,v1=<hex hmac-sha256>
  *
  * The MAC input is "<t>." . raw body, keyed with the subscription secret
- * (whsec_...). Mirrors services/webhooks/internal/signature (the reference
+ * (lcwh_...). Mirrors services/webhooks/internal/signature (the reference
  * implementation).
  */
 final class Webhook
@@ -24,7 +24,7 @@ final class Webhook
      * Verifies a webhook delivery. Returns true only when the header carries
      * a fresh timestamp and at least one v1 signature matches the payload.
      *
-     *   $ok = Webhook::verifySignature($rawBody, $_SERVER['HTTP_X_LEDGERCORE_SIGNATURE'] ?? null, 'whsec_...');
+     *   $ok = Webhook::verifySignature($rawBody, $_SERVER['HTTP_X_LEDGERCORE_SIGNATURE'] ?? null, 'lcwh_...');
      *
      * `$payload` must be the exact raw request body as received — do not
      * re-serialize parsed JSON. `$toleranceSeconds` 0 disables the freshness

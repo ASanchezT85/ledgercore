@@ -35,7 +35,7 @@ func TestSecretEncryptedAtRest(t *testing.T) {
 	ctx := context.Background()
 	tenantID := uuid.New()
 
-	const plainSecret = "whsec_plaintextsecretshouldbesealed0"
+	const plainSecret = "lcwh_plaintextsecretshouldbesealed0"
 	sub := domain.Subscription{
 		ID:         uuid.New(),
 		TenantID:   tenantID,
@@ -54,7 +54,7 @@ func TestSecretEncryptedAtRest(t *testing.T) {
 	if !keycrypt.IsEncrypted(stored) {
 		t.Fatalf("stored secret is not encrypted: %q", stored)
 	}
-	if strings.Contains(stored, plainSecret) || strings.Contains(stored, "whsec_") {
+	if strings.Contains(stored, plainSecret) || strings.Contains(stored, domain.SecretPrefix) {
 		t.Fatalf("plaintext secret leaked into the column: %q", stored)
 	}
 
@@ -91,7 +91,7 @@ func TestSecretEncryptedAtRest(t *testing.T) {
 
 	// Rotate: both current and previous columns must stay encrypted, and both
 	// must decrypt back correctly during the grace window.
-	const newSecret = "whsec_rotatednewsecret00000000000000"
+	const newSecret = "lcwh_rotatednewsecret00000000000000"
 	if err := repo.RotateSecret(ctx, tenantID, sub.ID, newSecret, time.Now().UTC().Add(domain.RotationGrace)); err != nil {
 		t.Fatalf("rotate: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestReencryptPlaintextSecrets(t *testing.T) {
 
 	// Legacy row: created WITHOUT a cipher, so the secret is plaintext.
 	plainRepo := NewRepo(pool, nil)
-	const legacy = "whsec_legacyplaintextsecret000000000"
+	const legacy = "lcwh_legacyplaintextsecret000000000"
 	sub := domain.Subscription{
 		ID: uuid.New(), TenantID: tenantID, URL: "https://l.example.com/h",
 		Secret: legacy, EventTypes: []string{"*"}, Active: true, CreatedAt: time.Now().UTC(),

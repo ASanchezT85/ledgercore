@@ -65,7 +65,7 @@ constante, tolerancia de timestamp recomendada de 5 minutos y soporte de
 varias entradas `v1` para ventanas de rotación de secreto. Los tests fijan
 vectores conocidos calculados con una implementación independiente.
 
-El secreto tiene la forma `whsec_<32 base62>` y **solo se devuelve al crear
+El secreto tiene la forma `lcwh_<32 base62>` y **solo se devuelve al crear
 la suscripción o al rotarlo**; después no es legible por API.
 `subscriptions.secret` queda como TEXT con un TODO de cifrado vía KMS.
 

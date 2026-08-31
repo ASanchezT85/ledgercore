@@ -58,6 +58,27 @@ project self-hostable, licensed and publishable.
 - ADR-008 claimed balances are reconstructed from `postings.effective_at`. That
   column is on `transactions`, not `postings`.
 
+### Changed — BREAKING
+
+- **Webhook secrets now use the `lcwh_` prefix instead of `whsec_`.** The old
+  prefix was Stripe's format, borrowed. GitHub's secret scanner typed every
+  webhook test fixture in the repository as a leaked "Stripe Webhook Signing
+  Secret" — ten alerts on the day of publication — and would have done the same
+  in every fork and for every contributor adding a webhook test. It also implied
+  a Stripe integration that does not exist.
+
+  Any secret issued before this change stops matching the documented format.
+  There is no compatibility shim: the change lands at `v0.1.0`, before there is
+  anyone holding one. The prefix now has a single definition
+  (`domain.SecretPrefix`), and the test that previously hardcoded it references
+  the constant instead.
+
+  **The SDKs are unaffected in code** — they use the secret as an opaque HMAC key
+  and never parse the prefix — so neither package needs republishing. The
+  signature known-answer vectors were recomputed, since the secret is the HMAC
+  key; they were derived with an independent implementation rather than from the
+  code under test.
+
 ### Changed
 
 - **Retired the hosted SaaS model.** `ledgercore.sanchezavila.com` and

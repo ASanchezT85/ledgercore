@@ -43,7 +43,7 @@ Money.toDecimal("10050", 2);           // "100.50"
 ### Webhooks
 
 ```ts
-const ok = await lc.webhooks.verifySignature(rawBody, req.headers["x-ledgercore-signature"], "whsec_...");
+const ok = await lc.webhooks.verifySignature(rawBody, req.headers["x-ledgercore-signature"], "lcwh_...");
 ```
 
 Verifica el header `X-LedgerCore-Signature` (`t=<unix>,v1=<hmac-sha256 hex>`) en tiempo constante, con ventana anti-replay de 5 minutos. El header puede traer **múltiples `v1`** (rotación de secreto: 24 h de gracia hasta `previous_secret_expires_at`, que devuelve `rotateSecret`); la verificación acepta si CUALQUIERA coincide. Usa siempre el cuerpo crudo, no JSON re-serializado. La superficie completa: `lc.webhooks.create/list/listAll/get/update/rotateSecret` y `lc.webhooks.deliveries.list/listAll/retry`.

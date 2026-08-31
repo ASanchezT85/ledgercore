@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { verifySignature } from "../src/webhook-signature.js";
 
-const SECRET = "whsec_4f3e2d1c0b9a";
+const SECRET = "lcwh_4f3e2d1c0b9a";
 const BODY = JSON.stringify({ event_id: "01890a5d", type: "ledger.transaction.posted" });
 
 function sign(secret: string, t: number, body: string): string {
@@ -18,7 +18,7 @@ describe("verifySignature", () => {
   });
 
   it("accepts any matching candidate during secret rotation", async () => {
-    const header = `t=${t},v1=${sign("whsec_old", t, BODY)},v1=${sign(SECRET, t, BODY)}`;
+    const header = `t=${t},v1=${sign("lcwh_old", t, BODY)},v1=${sign(SECRET, t, BODY)}`;
     await expect(verifySignature(BODY, header, SECRET, { now: t })).resolves.toBe(true);
   });
 
@@ -34,7 +34,7 @@ describe("verifySignature", () => {
 
   it("rejects the wrong secret", async () => {
     const header = `t=${t},v1=${sign(SECRET, t, BODY)}`;
-    await expect(verifySignature(BODY, header, "whsec_other", { now: t })).resolves.toBe(false);
+    await expect(verifySignature(BODY, header, "lcwh_other", { now: t })).resolves.toBe(false);
   });
 
   it("rejects stale timestamps outside the tolerance window", async () => {
