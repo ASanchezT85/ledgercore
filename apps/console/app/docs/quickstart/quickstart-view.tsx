@@ -8,7 +8,7 @@ import { BrandLockup } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import type { Lang } from "@/lib/i18n";
 
-const API = "https://api.ledgercore.sanchezavila.com";
+const API = "http://localhost:8080";
 
 // ---- curls (shared between languages; shapes follow ledger.v1.yaml) -------
 

@@ -10,8 +10,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/ident"
-	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/ident"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/domain"
 )
 
 // IssuedToken is the OAuth2-style response of POST /v1/auth/token.

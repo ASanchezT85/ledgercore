@@ -15,7 +15,7 @@ npm install @ledgercore/sdk
 ```ts
 import { LedgerCore, Money } from "@ledgercore/sdk";
 
-const lc = new LedgerCore({ apiKey: "lk_sandbox_...", baseUrl: "https://api.ledgercore.sanchezavila.com" });
+const lc = new LedgerCore({ apiKey: "lk_sandbox_...", baseUrl: "http://localhost:8080" });
 const ledger = await lc.ledgers.create({ name: "main" });
 const wallet = await lc.accounts.create({ ledger_id: ledger.id, name: "customer:42:wallet", type: "liability", normal_balance: "CREDIT" });
 const txn = await lc.transactions.create({ ledger_id: ledger.id, postings: [/* débitos = créditos */] });

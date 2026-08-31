@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/domain"
 )
 
 func TestKnownEventTypesStayInSyncWithEventsLib(t *testing.T) {

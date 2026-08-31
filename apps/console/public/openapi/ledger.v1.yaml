@@ -11,10 +11,8 @@ info:
     scoped to the authenticated tenant.
   contact:
     name: LedgerCore Platform Team
-    url: https://github.com/ledgercore/ledgercore
+    url: https://github.com/ASanchezT85/ledgercore
 servers:
-  - url: https://api.ledgercore.sanchezavila.com
-    description: Production (via gateway)
   - url: http://localhost:8081
     description: Local development (direct)
   - url: http://localhost:8080
@@ -1024,7 +1022,7 @@ paths:
 
         Convention: an account belongs to a provider when its name/path
         contains a `provider` segment followed by the provider name —
-        `assets:provider:thunes:usd` or `liabilities/provider/dlocal/mxn`
+        `assets:provider:acmepay:usd` or `liabilities/provider/nordpay/mxn`
         (both `:` and `/` work as separators) — or when the account carries
         `metadata.provider` as an explicit override (it wins over the path).
 
@@ -1044,17 +1042,17 @@ paths:
                 $ref: '#/components/schemas/ProviderPositions'
               examples:
                 twoProviders:
-                  summary: Positive position with Thunes, payable to dLocal
+                  summary: Positive position with AcmePay, payable to NordPay
                   value:
                     data:
-                      - provider: dlocal
+                      - provider: nordpay
                         positions:
                           - asset: USD
                             exponent: 2
                             net: '-1200'
                             direction: we_owe_them
                             accounts: [9e4f0a61-3d5e-7f80-c193-0c1d2e3f4a51]
-                      - provider: thunes
+                      - provider: acmepay
                         positions:
                           - asset: MXN
                             exponent: 2

@@ -16,8 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/app"
 )
 
 // subscriptionSpec pairs a filter subject with its durable consumer name.

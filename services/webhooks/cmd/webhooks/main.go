@@ -15,16 +15,16 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/libs/go/obs"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/httpapi"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/natsconsumer"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/postgres"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/adapters/purge"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/config"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/dispatcher"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/keycrypt"
+	"github.com/ASanchezT85/ledgercore/libs/go/obs"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/adapters/httpapi"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/adapters/natsconsumer"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/adapters/postgres"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/adapters/purge"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/config"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/dispatcher"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/keycrypt"
 )
 
 const serviceName = "webhooks"

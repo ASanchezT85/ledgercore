@@ -16,7 +16,7 @@ composer require ledgercore/sdk
 use LedgerCore\LedgerCore;
 use LedgerCore\Money;
 
-$lc = new LedgerCore(['api_key' => 'lk_sandbox_...', 'base_url' => 'https://api.ledgercore.sanchezavila.com']);
+$lc = new LedgerCore(['api_key' => 'lk_sandbox_...', 'base_url' => 'http://localhost:8080']);
 $ledger = $lc->ledgers->create(['name' => 'main']);
 $wallet = $lc->accounts->create(['ledger_id' => $ledger['id'], 'name' => 'customer:42:wallet', 'type' => 'liability', 'normal_balance' => 'CREDIT']);
 $txn = $lc->transactions->create(['ledger_id' => $ledger['id'], 'postings' => [/* débitos = créditos */]]);

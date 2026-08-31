@@ -48,7 +48,7 @@ function LiveDevelopers() {
   useEffect(() => {
     void sessionClaims().then(setClaims);
   }, []);
-  const api = apiBaseUrl() || "https://api.ledgercore.sanchezavila.com";
+  const api = apiBaseUrl() || "http://localhost:8080";
 
   return (
     <>

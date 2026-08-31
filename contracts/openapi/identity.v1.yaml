@@ -17,8 +17,6 @@ info:
       - `scopes`: string array, currently always `["ledger:read", "ledger:write"]`
       - standard registered claims (`sub` = API key id, `iat`, `exp`; TTL 15 minutes)
 servers:
-  - url: https://api.ledgercore.sanchezavila.com
-    description: Production (via gateway)
   - url: http://localhost:8082
     description: Local development (direct)
   - url: http://localhost:8080

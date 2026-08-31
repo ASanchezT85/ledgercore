@@ -1,4 +1,4 @@
-module github.com/ledgercore/ledgercore/libs/go
+module github.com/ASanchezT85/ledgercore/libs/go
 
 go 1.26
 

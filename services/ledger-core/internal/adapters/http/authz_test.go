@@ -25,11 +25,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/ident"
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/ident"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/app"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/domain"
 )
 
 // fakeStore satisfies app.Store with zero-value/no-op behavior. The negative

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
 )
 
 // DefaultInterval is how often the poller checks for pending rows.

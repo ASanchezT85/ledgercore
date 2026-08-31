@@ -13,18 +13,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/libs/go/obs"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/obs"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/httpapi"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/natsconsumer"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/postgres"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/adapters/purge"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/config"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/outbox"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/adapters/httpapi"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/adapters/natsconsumer"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/adapters/postgres"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/adapters/purge"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/config"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/outbox"
 )
 
 const serviceName = "reconciliation"

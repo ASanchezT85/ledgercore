@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/signature"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/signature"
 )
 
 // fakeSubs implements SubscriptionStore in memory for rotation tests.

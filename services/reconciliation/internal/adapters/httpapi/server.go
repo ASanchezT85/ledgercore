@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/ident"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/ident"
 
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/app"
 )
 
 // Server holds the handler dependencies.

@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/ident"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/ident"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/app"
 )
 
 // NewRouter assembles the full HTTP surface of ledger-core:

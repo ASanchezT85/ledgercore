@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
 )
 
 // Environment values carried in tokens.

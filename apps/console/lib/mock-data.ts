@@ -64,7 +64,7 @@ export const mockTransactions: Transaction[] = [
         ...USD,
       },
       {
-        account: "assets/custody/provider/thunes",
+        account: "assets/custody/provider/acmepay",
         direction: "credit",
         amountUnits: 2521300,
         ...USD,
@@ -281,16 +281,16 @@ export const mockDashboard: DashboardData = {
       status: "healthy",
     },
     {
-      source: "provider_thunes",
-      label: "Thunes (payouts)",
+      source: "provider_acmepay",
+      label: "AcmePay (payouts)",
       matchedPct: 97.42,
       openDiscrepancies: 3,
       lastRunAt: "2026-07-24T13:30:00Z",
       status: "degraded",
     },
     {
-      source: "provider_dlocal",
-      label: "dLocal (pay-in LatAm)",
+      source: "provider_nordpay",
+      label: "NordPay (pay-in LatAm)",
       matchedPct: 94.86,
       openDiscrepancies: 1,
       lastRunAt: "2026-07-24T11:00:00Z",
@@ -318,7 +318,7 @@ export const mockLedgers: LedgerSummary[] = [
         balances: [{ ...USD, units: 1230025055 }],
       },
       {
-        path: "assets/custody/provider/thunes",
+        path: "assets/custody/provider/acmepay",
         balances: [{ ...USD, units: 486120033 }],
       },
       {
@@ -403,7 +403,7 @@ export const mockReconciliation: ReconciliationData = {
     },
     {
       id: "run_01J8ZCC1H9T4",
-      source: "provider_thunes",
+      source: "provider_acmepay",
       windowStart: "2026-07-24T12:30:00Z",
       windowEnd: "2026-07-24T13:30:00Z",
       status: "completed",
@@ -412,7 +412,7 @@ export const mockReconciliation: ReconciliationData = {
     },
     {
       id: "run_01J8ZCB6X3R8",
-      source: "provider_dlocal",
+      source: "provider_nordpay",
       windowStart: "2026-07-24T10:00:00Z",
       windowEnd: "2026-07-24T11:00:00Z",
       status: "failed",
@@ -421,7 +421,7 @@ export const mockReconciliation: ReconciliationData = {
     },
     {
       id: "run_01J8ZCA0V5N2",
-      source: "provider_dlocal",
+      source: "provider_nordpay",
       windowStart: "2026-07-24T14:00:00Z",
       windowEnd: "2026-07-24T15:00:00Z",
       status: "running",
@@ -432,7 +432,7 @@ export const mockReconciliation: ReconciliationData = {
   discrepancies: [
     {
       id: "dsc_01J8ZCH9W2M6",
-      source: "provider_thunes",
+      source: "provider_acmepay",
       type: "amount_mismatch",
       status: "open",
       externalRef: "THN-8842107",
@@ -443,7 +443,7 @@ export const mockReconciliation: ReconciliationData = {
     },
     {
       id: "dsc_01J8ZCG4T8K3",
-      source: "provider_thunes",
+      source: "provider_acmepay",
       type: "missing_internal",
       status: "investigating",
       externalRef: "THN-8841990",
@@ -476,7 +476,7 @@ export const mockReconciliation: ReconciliationData = {
     },
     {
       id: "dsc_01J8ZCD2K6H1",
-      source: "provider_dlocal",
+      source: "provider_nordpay",
       type: "missing_internal",
       status: "open",
       externalRef: "DL-20260724-3312",
@@ -498,7 +498,7 @@ export const mockReconciliation: ReconciliationData = {
     },
     {
       id: "dsc_01J8ZCB8G3F2",
-      source: "provider_thunes",
+      source: "provider_acmepay",
       type: "amount_mismatch",
       status: "open",
       externalRef: "THN-8839455",

@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
-	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/domain"
 )
 
 // TestStoreIntegration exercises the real repositories against PostgreSQL.

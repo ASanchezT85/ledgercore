@@ -136,7 +136,6 @@ jobs:
       LEDGERCORE_IDENTITY_RT_PASSWORD: ledgercore_identity_rt_dev
       LEDGERCORE_RECON_RT_PASSWORD: ledgercore_recon_rt_dev
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: ledgercore_webhooks_rt_dev
-      LEDGERCORE_BLOG_RT_PASSWORD: ledgercore_blog_rt_dev
     steps:
       - uses: actions/checkout@v4
 
@@ -176,28 +175,6 @@ jobs:
             echo "::error::runtime role escalated to ledgercore_maint"; exit 1
           fi
 
-      # The blog role is the only one reachable from an UNAUTHENTICATED write
-      # (anyone can post a comment), so its boundary gets its own assertions.
-      - name: Blog role CANNOT reach any money schema
-        run: |
-          M="postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore"
-          BLOG="postgres://ledgercore_blog_rt:ledgercore_blog_rt_dev@localhost:5432/ledgercore"
-          for S in ledger identity recon webhooks; do
-            psql "$M" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS ${S}.blog_probe(id int);"
-            if psql "$BLOG" -c "SELECT * FROM ${S}.blog_probe;" 2>/dev/null; then
-              echo "::error::blog role read schema ${S} — the anonymous write path reaches money data"; exit 1
-            fi
-          done
-
-      - name: Blog role CAN use its own schema but CANNOT run DDL there
-        run: |
-          M="postgres://ledgercore_migrator:ledgercore_migrator_dev@localhost:5432/ledgercore"
-          BLOG="postgres://ledgercore_blog_rt:ledgercore_blog_rt_dev@localhost:5432/ledgercore"
-          psql "$M" -v ON_ERROR_STOP=1 -c "SET search_path=blog; CREATE TABLE probe(id int);"
-          psql "$BLOG" -v ON_ERROR_STOP=1 -c "INSERT INTO blog.probe VALUES (1); SELECT count(*) FROM blog.probe;"
-          if psql "$BLOG" -c "SET search_path=blog; CREATE TABLE hax(id int);" 2>/dev/null; then
-            echo "::error::blog role was able to CREATE a table — DDL not revoked"; exit 1
-          fi
 
   web:
     name: web (apps/console)

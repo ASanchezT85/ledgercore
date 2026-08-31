@@ -4,7 +4,7 @@ Motor de conciliación de LedgerCore contra fuentes externas (bancos, PSPs, prov
 
 | Atributo | Valor |
 |---|---|
-| Módulo Go | `github.com/ledgercore/ledgercore/services/reconciliation` |
+| Módulo Go | `github.com/ASanchezT85/ledgercore/services/reconciliation` |
 | Puerto | **8083** |
 | Schema Postgres | **`recon`** (jamás toca schemas ajenos) |
 | Eventos que consume | `ledger.transaction.posted` |

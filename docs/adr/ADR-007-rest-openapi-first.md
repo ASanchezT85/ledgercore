@@ -1,17 +1,25 @@
-# ADR-007 — API pública REST, OpenAPI-first, SDKs generados
+# ADR-007 — Public REST API, OpenAPI-first, generated SDKs
 
-**Estado:** aceptada · **Fecha:** 2026-07-24
+**Status:** accepted · **Date:** 2026-07-24
 
-## Contexto
-El producto ES el API. Los clientes objetivo (fintechs LatAm, PHP/Node/Python) valoran integración rápida sobre elegancia de protocolo. gRPC externo añade fricción de adopción.
+## Context
+The API *is* the product surface. Integrators value fast, boring integration
+over protocol elegance, and an externally exposed gRPC interface adds adoption
+friction for the languages most of them use.
 
-## Decisión
-- API pública **REST + JSON**, contratos **OpenAPI 3.1** en `contracts/openapi/` escritos ANTES que los handlers.
-- Versionado por path (`/v1`): aditivos sí, breaking → `/v2` con 12 meses de convivencia y header `Sunset`.
-- `Idempotency-Key` obligatoria en toda mutación; paginación keyset con cursor opaco; errores `{"error":{"code","message"}}` con códigos estables.
-- SDKs **generados** desde OpenAPI (evaluar Speakeasy/Fern en fase 2): PHP y TypeScript primero, Python en fase 3.
-- gRPC queda reservado como opción interna futura, nunca como requisito para clientes.
+## Decision
+- Public API is **REST + JSON**; the contracts are **OpenAPI 3.1** documents in
+  `contracts/openapi/`, written before the handlers.
+- Versioned by path (`/v1`). Additive changes are allowed in place; a breaking
+  change means `/v2` with an overlap period and a `Sunset` header.
+- `Idempotency-Key` is required on every mutation; pagination is keyset-based
+  with an opaque cursor; errors are `{"error":{"code","message"}}` with a stable
+  code catalogue (see [`docs/errores-api.md`](../errores-api.md)).
+- SDKs are generated from the OpenAPI documents. PHP and TypeScript exist today.
+- gRPC remains a possible internal transport, never a requirement for clients.
 
-## Consecuencias
-- (+) Un solo artefacto (el YAML) alimenta docs, SDKs, validación de drift en CI y el portal de desarrolladores.
-- (−) Mantener el contrato primero exige disciplina: CI falla si el handler diverge del YAML (oasdiff, fase 2).
+## Consequences
+- (+) One artifact — the YAML — feeds the docs, the SDKs, the drift check in CI
+  and the API reference.
+- (−) Contract-first requires discipline: CI has to fail when a handler diverges
+  from the document, otherwise the contract quietly becomes fiction.

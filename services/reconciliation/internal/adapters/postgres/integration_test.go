@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
 
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/domain"
 )
 
 // capturePublisher records published envelopes (implements events.Publisher).

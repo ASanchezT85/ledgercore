@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/ident"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/ident"
 
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/domain"
 )
 
 // maxImportBytes caps a CSV upload at 10 MiB.

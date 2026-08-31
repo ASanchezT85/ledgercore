@@ -12,7 +12,7 @@ import { BrandLockup } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import type { Lang } from "@/lib/i18n";
 
-export const API_BASE = "https://api.ledgercore.sanchezavila.com";
+export const API_BASE = "http://localhost:8080";
 
 // ---- content model --------------------------------------------------------
 

@@ -23,8 +23,6 @@ info:
     derived from the JWT; in the `live` environment endpoint URLs must be
     HTTPS.
 servers:
-  - url: https://api.ledgercore.sanchezavila.com
-    description: Production (via gateway)
   - url: http://localhost:8084
     description: Local development (direct)
   - url: http://localhost:8080

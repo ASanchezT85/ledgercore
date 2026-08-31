@@ -235,42 +235,6 @@ function LandingContent() {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section className="mx-auto w-full max-w-6xl px-6 pb-20">
-        <div className="lc-reveal mb-8 max-w-2xl">
-          <h2 className="font-serif text-[30px] leading-tight tracking-[-0.01em] text-ink">
-            {t.pricing.title}
-          </h2>
-          <p className="mt-2 text-sm text-ink-muted">{t.pricing.subtitle}</p>
-        </div>
-        <dl className="grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
-          {t.pricing.tiers.map(({ name, price, included, overage }) => (
-            <div key={name} className="border-t border-edge-strong pt-4">
-              <dt className="text-[11px] font-medium tracking-widest text-ink-faint uppercase">
-                {name}
-              </dt>
-              <dd>
-                <p className="num mt-3 text-2xl font-semibold tracking-tight text-ink">
-                  {price}
-                </p>
-                <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-                  {included}
-                </p>
-                <p className="mt-1 text-sm leading-relaxed text-ink-faint">
-                  {overage}
-                </p>
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-10 max-w-3xl space-y-2">
-          {t.pricing.notes.map((note) => (
-            <p key={note} className="text-sm leading-relaxed text-ink-faint">
-              {note}
-            </p>
-          ))}
-        </div>
-      </section>
 
       {/* Trust strip */}
       <section className="border-y border-edge bg-surface/50">

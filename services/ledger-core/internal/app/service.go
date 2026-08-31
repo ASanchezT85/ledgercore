@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/domain"
 )
 
 // DefaultHoldTTL is how long a hold lives when the client does not provide

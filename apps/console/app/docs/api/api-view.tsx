@@ -83,7 +83,7 @@ export function ApiReferenceView() {
           </Link>
         </div>
         <span className="font-mono text-xs text-ink-faint">
-          api.ledgercore.sanchezavila.com
+          localhost:8080
         </span>
       </header>
       {error && (

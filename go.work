@@ -1,7 +1,6 @@
 go 1.26
 
 use (
-	./infra/postgres/policytest
 	./libs/go
 	./services/identity
 	./services/ledger-core

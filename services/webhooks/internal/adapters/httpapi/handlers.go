@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/ident"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/ident"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/domain"
 )
 
 // ---- DTOs -----------------------------------------------------------------
