@@ -145,10 +145,12 @@ so one tenant cannot read or write another tenant's rows. Each service connects
 as its own `NOSUPERUSER NOBYPASSRLS` role, and the isolation tests run as those
 real roles rather than as a superuser.
 
-Schema separation between services is enforced by explicit grants and cross-schema
-`REVOKE`s in [`infra/postgres/init/01-init.sql`](infra/postgres/init/01-init.sql).
-That part is **not** covered by an automated test — see
-[`TEST_STRATEGY.md`](docs/oss-transition/TEST_STRATEGY.md#known-gaps).
+Schema separation between services is enforced by explicit grants and
+cross-schema `REVOKE`s in
+[`infra/postgres/init/01-init.sql`](infra/postgres/init/01-init.sql), and checked
+by a gate that applies that file to a clean database and then verifies, as the
+real runtime role, that it cannot read a sibling schema, cannot run DDL, and
+cannot escalate to the maintenance role.
 
 ## What LedgerCore does not guarantee
 
