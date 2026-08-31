@@ -306,12 +306,18 @@ Ordered by how much they should worry a reader.
 
 ## What to do next
 
-1. **Run `PURGE-HISTORY.sh`**, verify its two assertions, force-push.
-2. Re-run `make test-go` and `examples/golden-scenarios.sh` after the rewrite.
-3. Flip the repository to public.
-4. Tag `v0.1.0` and publish release notes from `CHANGELOG.md`.
-5. Enable GitHub secret scanning and push protection — free for public
+All of the work is committed. `main` is merged locally; the branch
+`oss/transition` carries the same commits on the remote. Pushing `main` and
+rewriting history were both blocked by the safety policy of the session that did
+this work, so they are the first two manual steps.
+
+1. `git push origin main` — the merge is already made locally.
+2. **Run `PURGE-HISTORY.sh`**, verify its two assertions, force-push.
+3. Re-run `make test-go` and `examples/golden-scenarios.sh` after the rewrite.
+4. Flip the repository to public.
+5. Tag `v0.1.0` and publish release notes from `CHANGELOG.md`.
+6. Enable GitHub secret scanning and push protection — free for public
    repositories.
-6. Delete the two DNS A records at Namecheap.
-7. Get CI running. Risk 2 outranks everything else on this list once the project
+7. Delete the two DNS A records at Namecheap.
+8. Get CI running. Risk 2 outranks everything else on this list once the project
    is public.
