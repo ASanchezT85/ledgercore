@@ -105,6 +105,7 @@ repository.
 
 ## Before this
 
-The project's earlier history is a private commercial codebase and is not
-described here as releases. The state immediately before the open-source
-transition is tagged `pre-oss-transition-20260831`.
+The project's earlier history was a private commercial codebase. It is not
+described here as releases, and it is **not part of this repository**: it
+contained a former employer's confidential material and was purged before
+publication. It survives only in private mirrors held by the author.

@@ -1,6 +1,11 @@
 # CURRENT_STATE — LedgerCore as found
 
-**Date:** 2026-08-31 · **Baseline commit:** `8f59fc6` · **Checkpoint tag:** `pre-oss-transition-20260831`
+**Date:** 2026-08-31 · **Baseline:** the last commit before the transition began.
+
+> The pre-transition history is **not** part of this repository. It contained a
+> former employer's confidential material and was purged before publication; it
+> survives only in private mirrors held by the author. Commit hashes from before
+> the transition therefore do not resolve here, deliberately.
 
 This document describes the system as it actually was when the open-source
 transition started — not as it was designed or advertised.

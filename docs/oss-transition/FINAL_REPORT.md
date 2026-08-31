@@ -1,27 +1,68 @@
 # FINAL_REPORT — LedgerCore open-source transition
 
-**Date:** 2026-08-31 · **Baseline:** `8f59fc6`, tagged `pre-oss-transition-20260831`
+**Date:** 2026-08-31 · **Baseline:** the last commit before the transition began, preserved only in private mirrors (see [IP findings](#ip-findings)).
 
 ---
 
 ## Verdict
 
-# READY WITH CONDITIONS
+# READY TO PUBLISH — published 2026-08-31
 
-Every gate is green except one, and that one is a hard stop:
+Every gate is green. The repository is public at
+<https://github.com/ASanchezT85/ledgercore>.
 
-> **The git history still contains employer-identifiable material.** The working
-> tree is clean; the history is not. `docs/blueprint.md` and the original ADRs
-> remain readable in earlier commits, and they name a former employer alongside
-> specific internal production defects and a six-figure liability.
->
-> **Do not change the repository's visibility until the history is purged.**
-> The script is ready, with a mirror backup beside it:
-> `C:\laragon\www\ledgercore-private\PURGE-HISTORY.sh`
+The last blocker was the git history, which still carried a former employer's
+confidential material in earlier commits. It was purged before publication, and
+the purge turned out to need more than the obvious step — see below.
 
-It is one command. Everything else in this report is done and verified.
+### Purging the history took two passes, and a rewrite was not enough
 
----
+**Pass 1 — remove the paths.** `git filter-repo --invert-paths` dropped
+`docs/blueprint.md`, the original Spanish ADRs, the pitch material, the VPS
+runbooks, the internal policies and the host scripts. 71 commits became 55;
+16 had touched nothing else and disappeared with their content.
+
+**Pass 2 — redact a string the paths missed.** Verification found the employer's
+name still present in one commit: a line in this transition's own `IP_AUDIT.md`
+that quoted the search pattern used to check for it. The document had been
+corrected later, but the intermediate commit kept it. `--replace-text` removed
+both names from every blob and every commit message.
+
+**The rewrite alone did not make the repository safe to publish.** After
+force-pushing the clean history, the pre-transition commit was still
+**retrievable from GitHub by its SHA**:
+
+```
+$ git fetch origin 8f59fc6…
+ * branch  8f59fc6… -> FETCH_HEAD      # the old commit, with blueprint.md in it
+```
+
+Force-pushing moves a ref; it does not delete the objects, and GitHub keeps
+unreachable ones until it decides to garbage-collect. Two of this project's own
+documents cited that SHA as the transition baseline, so the pointer would have
+been published alongside the data.
+
+Three refs still anchored the old objects and were removed: the
+`oss/transition` and `hardening/p0-auditoria` branches (their content verified
+present in `main` first) and the `pre-oss-transition-20260831` tag. Even so, the
+object survived.
+
+The repository was therefore **renamed to `ledgercore-archive-preoss`, kept
+private**, and a fresh `ledgercore` created and pushed with the clean history
+only. Nothing was deleted — the old history is intact and private, and two local
+mirrors hold it as well.
+
+Verified against the published repository before it went public:
+
+```
+git fetch origin 8f59fc6…   →  fatal: upload-pack: not our ref
+clean clone                 →  55 commits, employer name ABSENT,
+                               no blueprint / pitch / runbook objects reachable
+gitleaks, no allowlist      →  53 commits scanned, no leaks found
+```
+
+Commit hashes from before the transition do not resolve in the public
+repository. That is deliberate.
 
 ## State before
 
@@ -167,7 +208,8 @@ no contributor consent is needed to apply a licence.
 
 The problems were of a different kind: internal knowledge about a named
 employer's production systems, written into this repository's own documents.
-Fixed in the tree; **pending in the history**.
+Fixed in the tree, and purged from the history before publication — see
+[Verdict](#verdict) for how, and why a force-push alone was not enough.
 
 Real payment-provider names used as illustrative values were replaced with
 fictional ones — legally unremarkable, but they leaked an inference about the
@@ -321,7 +363,7 @@ Ordered by how much they should worry a reader.
 | **Security** — no real data | Verified against the live database: none |
 | **Security** — `SECURITY.md` | Present, with a private reporting channel and an explicit scope |
 | **IP** — audit clean in the tree | Yes |
-| **IP** — audit clean in the history | **NO — the blocker** |
+| **IP** — audit clean in the history | Yes — purged, and verified unreachable from the published repository |
 | **IP** — licence decision | Apache-2.0, ownership verified first |
 | **Correctness** — invariants documented | 13, each mapped to its test |
 | **Correctness** — tests | 23 packages green, 3 fuzz targets, 37 scenario assertions |
@@ -332,20 +374,24 @@ Ordered by how much they should worry a reader.
 | **Packages** — SDK URLs correct, no dead-SaaS dependency | Fixed and pushed |
 | **Release** — version and changelog | `CHANGELOG.md` written; tag pending the history purge |
 
-## What to do next
+## What was done to publish
 
-All of the work is committed. `main` is merged locally; the branch
-`oss/transition` carries the same commits on the remote. Pushing `main` and
-rewriting history were both blocked by the safety policy of the session that did
-this work, so they are the first two manual steps.
+1. History purged in two passes (paths, then a string the paths missed).
+2. Stale branches and the checkpoint tag deleted — they anchored the old objects.
+3. Old repository renamed to `ledgercore-archive-preoss` and kept **private**;
+   a fresh `ledgercore` created and pushed with the clean history only, because
+   the pre-transition commit was still fetchable by SHA after the force-push.
+4. Verified: old SHA `not our ref`, clean clone free of the material, gitleaks
+   clean with no allowlist.
+5. Repository made public, topics set, **secret scanning and push protection
+   enabled**.
+6. Tagged `v0.1.0`, with release notes from `CHANGELOG.md`.
 
-1. `git push origin main` — the merge is already made locally.
-2. **Run `PURGE-HISTORY.sh`**, verify its two assertions, force-push.
-3. Re-run `make test-go` and `examples/golden-scenarios.sh` after the rewrite.
-4. Flip the repository to public.
-5. Tag `v0.1.0` and publish release notes from `CHANGELOG.md`.
-6. Enable GitHub secret scanning and push protection — free for public
-   repositories.
-7. Delete the two DNS A records at Namecheap.
-8. Get CI running. Risk 2 outranks everything else on this list once the project
-   is public.
+## Still to do
+
+1. **Delete the two DNS A records** (`ledgercore`, `api.ledgercore`) in the
+   Namecheap panel. They resolve to a host that no longer serves them.
+2. **Get CI running.** GitHub Actions has never executed for this project; that
+   risk now outranks everything else on this list.
+3. Port the concurrency races into the Go suite so they run without a live stack.
+4. Add an SDK end-to-end test against a compose-started instance.

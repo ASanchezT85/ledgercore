@@ -35,8 +35,8 @@ Deleting is easy; deleting something irreplaceable is the risk. In order:
 1. **The repository holds everything needed to rebuild.** The full local stack
    is `infra/compose/docker-compose.yml`; nothing on the host was unique.
 2. **A mirror backup of the repository** was taken outside it —
-   `ledgercore-backup-20260831.git`, 64 commits and the
-   `pre-oss-transition-20260831` tag.
+   `ledgercore-backup-20260831.git`, holding the complete pre-transition
+   history. It stays private.
 3. **Private documents were preserved outside the repository** before removal —
    runbooks, pitch material, policies, the blog posts.
 4. **The database was inspected, not assumed:**
