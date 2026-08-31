@@ -94,11 +94,32 @@ That script is why no equivalent leak has happened since.
 - `scripts/export-clean.sh` is the only sanctioned way to produce an archive of
   this repository.
 
+## GitHub secret scanning: 10 alerts, all resolved as test fixtures
+
+Secret scanning and push protection were enabled when the repository went
+public. It immediately raised **10 alerts, every one typed "Stripe Webhook
+Signing Secret"**, and every one located in a `_test.go` file under
+`services/webhooks/`.
+
+The cause is a prefix collision, not a leak: **LedgerCore issues its own webhook
+secrets with the `whsec_` prefix, which is also Stripe's format.** GitHub's
+scanner matches the shape and cannot tell whose secret it is. The matched values
+are hardcoded constants in tests — `whsec_00000000…`, `whsec_old0000…` and
+similar — and none was ever issued by anything.
+
+All 10 were resolved as `used_in_tests` with that explanation rather than
+dismissed, so the reasoning is on the record next to each alert.
+
+**This will recur.** Any contributor adding a webhook test trips it again, and
+so does anyone who forks the project. The clean fix is to stop borrowing
+Stripe's prefix — `lcwh_` would collide with nothing — but that is a breaking
+change to a wire format already shipped in two published SDKs, so it is recorded
+here as a known wart rather than changed on the way out the door.
+
 ## Recommendations
 
-1. **Enable GitHub secret scanning and push protection** when the repository
-   becomes public. It is free for public repositories and catches the next
-   mistake at push time rather than at audit time.
+1. ~~Enable GitHub secret scanning and push protection~~ — **done** when the
+   repository went public. See the section above for what it found.
 2. **Revoke the deploy key** used by the retired host.
 3. Keep running `gitleaks` **without** the project allowlist in any future
    audit. An allowlist is a convenience for CI, not evidence.
