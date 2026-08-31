@@ -104,13 +104,24 @@ cannot both pass the check.
 
 Reversing does not modify the original transaction. It writes a new `posted`
 transaction with the opposite directions, referencing the original
-(`reversed_by`, `reference: reversal-of:<id>`). Reversing an already-reversed
-transaction is a `conflict`.
+(`reversed_by`, `reference: reversal-of:<id>`).
+
+Two behaviours that are easy to conflate, both verified:
+
+- **Retrying the same reversal** — no explicit idempotency key — derives the key
+  `reversal-of:<id>` and **replays**: `200` with `X-Idempotent-Replay: true`,
+  returning the same reversal. Retrying after a timeout is therefore safe.
+- **Asking for a second, distinct reversal** — a different explicit key — is a
+  `409 conflict`.
 
 **Enforced by:** App, on top of I-2 (the original *cannot* be edited even if the
 application tried).
 
-**Tests:** `TestReverse`, `TestReverseTransaction`, `TestDirectionOpposite`.
+**Tests:** `TestReverse`, `TestReverseTransaction`, `TestDirectionOpposite`,
+`TestReverseIdempotencyFingerprint`, and scenario E of
+[`examples/golden-scenarios.sh`](../examples/golden-scenarios.sh), which asserts
+both branches and that the gross `posted_debits` / `posted_credits` grow rather
+than being rewritten.
 
 ## I-6 · A balance is derivable from postings
 

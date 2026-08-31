@@ -93,8 +93,10 @@ The balance returns to `"posted":"0"` — but `posted_debits` and `posted_credit
 both still read `"9700"`. Nothing was erased.
 
 Every command above was run against a clean `docker compose up` while this
-README was written. The full transcript, including the cases that must fail, is
-in [`docs/oss-transition/VERIFICATION.md`](docs/oss-transition/VERIFICATION.md).
+README was written, and all of it is automated in
+[`examples/golden-scenarios.sh`](examples/golden-scenarios.sh) — 37 assertions,
+including the cases that must fail. The transcript is in
+[`docs/oss-transition/VERIFICATION.md`](docs/oss-transition/VERIFICATION.md).
 
 ---
 
@@ -129,8 +131,10 @@ database constraint over a payload fingerprint, not a check-then-insert.
 
 ### Reversible corrections
 
-A reversal creates a new posted transaction referencing the original. Reversing
-twice is a `conflict`. The original postings are never touched.
+A reversal creates a new posted transaction referencing the original; the
+original postings are never touched. Retrying the same reversal replays it
+(`200` + `X-Idempotent-Replay: true`), because the key is derived from the
+original transaction. Asking for a *second, distinct* reversal is a `conflict`.
 
 ### Auditable balances
 
@@ -269,7 +273,17 @@ LEDGERCORE_TEST_ADMIN_URL='postgres://postgres:postgres@localhost:5432/ledgercor
 ```
 
 `scripts/ci-local.sh` runs the whole gate against a clean `git archive` checkout.
-See [`docs/oss-transition/TEST_STRATEGY.md`](docs/oss-transition/TEST_STRATEGY.md).
+
+To check the guarantees end to end against a running stack — including the
+concurrency races — run the golden scenarios:
+
+```bash
+bash examples/golden-scenarios.sh
+```
+
+37 assertions covering deposits, every rejection case, idempotency replay and
+conflict, the hold lifecycle, reversal, two concurrency races and the trial
+balance. See [`docs/oss-transition/TEST_STRATEGY.md`](docs/oss-transition/TEST_STRATEGY.md).
 
 ## Security
 

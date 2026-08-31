@@ -82,14 +82,17 @@ statement reconstruction, and hold lifecycles.
 
 ### Concurrency
 
-Currently **manual**, not automated. The three races that matter were measured
-by firing parallel `curl` at a running stack:
+Automated in [`examples/golden-scenarios.sh`](../../examples/golden-scenarios.sh),
+which fires parallel `curl` at a running stack and asserts the outcome. It is a
+shell script rather than a Go test, so it needs a live stack and is not part of
+`make test-go`. The races it covers:
 
 | Race | Result |
 |---|---|
 | 20 identical idempotent requests | 1 created, 19 replayed; one accounting effect |
 | 20 holds against funds for 10 | 10 accepted, 10 `insufficient_funds`; nothing over-reserved |
 | 10 concurrent reversals, distinct keys | 1 created, 9 `conflict`; history intact |
+| Reversal retried with no key | replays the same reversal (200 + `X-Idempotent-Replay`) |
 
 Transcript in [`VERIFICATION.md`](VERIFICATION.md). Automating these is the
 highest-value gap below.
@@ -125,9 +128,10 @@ Listed so nobody has to discover them by being surprised.
 1. **CI has never run.** See above. Until Actions is enabled or an alternative
    runner is wired up, "green" means "green on a machine", not "green on every
    commit".
-2. **Concurrency is not automated.** The three races above were measured
-   manually. They should be Go tests firing goroutines at a real database, so a
-   regression is caught rather than re-discovered.
+2. **Concurrency is covered by a shell script, not by the Go suite.**
+   `examples/golden-scenarios.sh` asserts the races, but it needs a running
+   stack and nothing runs it automatically. They should also exist as Go tests
+   firing goroutines at a real database.
 3. **Simultaneous capture-and-release of one hold** is reasoned about in
    [`concurrency.md`](../concurrency.md) but not tested. Sequential double
    capture and release-after-capture are covered.

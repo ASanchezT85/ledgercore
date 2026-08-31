@@ -102,7 +102,7 @@ names the allowed values.
 | G | Amount `-100` | `validation_failed` — *"posting amounts must be greater than zero"* |
 | H | `99999999999999999999999` | `validation_failed` |
 | L | `9223372036854775808` (int64 max + 1) | `validation_failed` |
-| J | Reverse an already-reversed transaction | `conflict` — *"transaction is already reversed"* |
+| J | Reverse an already-reversed transaction, with a **distinct** key | `conflict` — *"transaction is already reversed"*. With no key it replays instead; see §10 |
 | S | Hold 999.00 against 50.00 available | `insufficient_funds` — *"available balance 5000 USD is less than hold amount 99900 USD"* |
 | U | Capture an already-captured hold | `conflict` |
 | W | Release an already-captured hold | `conflict` |
@@ -280,7 +280,41 @@ hosted sandbox never accumulated real usage, which is what makes its retirement 
 clean deletion rather than a migration. See
 [`VPS_RETIREMENT.md`](VPS_RETIREMENT.md).
 
-## 10 · Console
+## 10 · All of the above, as a runnable script
+
+Everything in sections 2, 3 and 5 is automated in
+[`../../examples/golden-scenarios.sh`](../../examples/golden-scenarios.sh):
+
+```
+$ bash examples/golden-scenarios.sh
+Setup                      3 assertions
+A · Deposit                4
+B · Invalid transactions   6
+C · Idempotency            4
+D · Holds                  9
+E · Reversal               6
+F · Concurrency            4
+G · Trial balance          1
+Result   passed: 37   failed: 0
+```
+
+Writing it surfaced one more thing worth recording. An early draft asserted that
+reversing twice is always a `conflict`. It is not, and the API is right:
+
+```
+reverse #1 (no key)                 -> 201, no replay header
+reverse #2 (no key)                 -> 200 + X-Idempotent-Replay: true
+reverse #3 (no key)                 -> 200 + X-Idempotent-Replay: true
+reverse    (distinct explicit key)  -> 409 conflict
+```
+
+Without a key the endpoint derives `reversal-of:<id>`, so a retry replays the
+first reversal instead of failing — which is what you want from a client that
+timed out. A *different* key means "reverse it again", and that is refused. The
+script now asserts both branches, and the README and `invariants.md` were
+corrected to describe this rather than the simpler thing that was written first.
+
+## 11 · Console
 
 ```
 rm -rf .next && npx tsc --noEmit     → clean
