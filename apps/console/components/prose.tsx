@@ -1,4 +1,4 @@
-/** Shared long-form typography for blog posts. */
+/** Shared long-form typography for long-form documentation pages. */
 
 export function P({ children }: { children: React.ReactNode }) {
   return (

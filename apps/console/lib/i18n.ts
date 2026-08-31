@@ -29,7 +29,6 @@ const es = {
       "Ledger de doble entrada como servicio: idempotencia, holds, conciliación, webhooks firmados y aislamiento multi-tenant con RLS.",
   },
   nav: {
-    blog: "Blog",
     docs: "Docs",
     quickstart: "Quickstart",
     login: "Iniciar sesión",
@@ -141,63 +140,13 @@ const es = {
     "Test anti-fuga entre tenants en CI",
     "Dinero como enteros, nunca floats",
   ],
-  pricing: {
-    title: "Cuánto cuesta",
-    subtitle:
-      "Se cobra por transacción asentada. Las cuentas, las lecturas de saldo y los webhooks no se miden: cobrarte por cuenta sería penalizarte por modelar bien tu dinero.",
-    tiers: [
-      {
-        name: "Sandbox",
-        price: "Gratis",
-        included: "API completa, sin tarjeta",
-        overage: "Sin fecha de vencimiento",
-      },
-      {
-        name: "Arranque",
-        price: "USD 400/mes",
-        included: "25.000 transacciones incluidas",
-        overage: "Luego USD 0,015 por transacción",
-      },
-      {
-        name: "Crecimiento",
-        price: "USD 1.200/mes",
-        included: "150.000 transacciones incluidas",
-        overage: "Luego USD 0,008 por transacción",
-      },
-      {
-        // "desde" va en la etiqueta y no en el precio: pegado al monto hacía
-        // que la cuarta columna se partiera en dos líneas y desalineara todo
-        // lo de abajo — justo en el tramo más caro, donde más importa que el
-        // ojo compare limpio.
-        name: "Escala · desde",
-        price: "USD 2.500/mes",
-        included: "500.000 transacciones incluidas",
-        overage: "Luego USD 0,004 por transacción",
-      },
-    ],
-    notes: [
-      "Las reversiones no se cobran. Revertir es corregir, y cobrar por corregir empuja a no corregir.",
-      "Estamos en etapa temprana y trabajando de cerca con los primeros equipos. Si tu caso no entra en ningún tramo, hablemos.",
-    ],
-  },
   finalCta: {
     title: "Deja de reconstruir el ledger. Constrúyelo una sola vez, bien.",
     subtitle:
-      "Estamos en etapa de descubrimiento y trabajando de cerca con los primeros equipos. Prueba el sandbox y cuéntanos qué mueve tu dinero.",
+      "Proyecto open source, etapa temprana. Clónalo, levántalo en local y revisa el código antes de confiarle nada.",
   },
   footer: {
     tagline: "LedgerCore — infraestructura financiera",
-  },
-  blog: {
-    metaTitle: "Blog · LedgerCore",
-    title: "Blog",
-    subtitle:
-      "Notas de construir un ledger de doble entrada como servicio. Un post, una idea técnica.",
-    readPost: "Leer el post",
-    backToBlog: "Volver al blog",
-    minRead: "min de lectura",
-    viewSingular: "lectura",
-    viewPlural: "lecturas",
   },
   comments: {
     title: "Comentarios",
@@ -219,36 +168,6 @@ const es = {
     errInvalid: "Revisá el nombre y el texto del comentario.",
     errNetwork: "No se pudo enviar. Revisá tu conexión.",
   },
-  moderation: {
-    metaTitle: "Moderación de comentarios · LedgerCore",
-    title: "Moderación de comentarios",
-    subtitle:
-      "Todos los comentarios del blog, ocultos incluidos. Ocultar un comentario raíz también oculta sus respuestas; restaurarlo no las devuelve una por una.",
-    tokenLabel: "Token de moderación",
-    tokenPlaceholder: "Pegá el BLOG_ADMIN_TOKEN",
-    tokenHint:
-      "Se guarda solo en esta pestaña (sessionStorage) y viaja en el header Authorization.",
-    enter: "Entrar",
-    signOut: "Salir",
-    errUnauthorized: "Token inválido.",
-    errNotConfigured:
-      "La moderación no está configurada: falta BLOG_ADMIN_TOKEN en el servidor.",
-    errUnavailable: "No se pudo contactar la base de datos.",
-    empty: "No hay comentarios todavía.",
-    filterAll: "Todos",
-    filterVisible: "Visibles",
-    filterHidden: "Ocultos",
-    statusVisible: "Visible",
-    statusHidden: "Oculto",
-    hide: "Ocultar",
-    restore: "Restaurar",
-    remove: "Eliminar",
-    confirmRemove:
-      "Se elimina de forma permanente, junto con sus respuestas. ¿Seguir?",
-    replyTo: "en respuesta a",
-    openPost: "Ver el post",
-    total: "comentarios",
-  },
   login: {
     tagline: "Consola de operaciones · ledger de doble partida como servicio",
     title: "Iniciar sesión",
@@ -267,7 +186,7 @@ const es = {
     submit: "Entrar con API key",
     jwtNotePre:
       "La llave se intercambia por un JWT de 15 minutos que la consola renueva sola. ¿No tienes llave? ",
-    jwtNoteLink: "Crea un sandbox gratis",
+    jwtNoteLink: "Crea un tenant",
     or: "o",
     demoMode: "Entrar en modo demo",
   },
@@ -281,7 +200,7 @@ const es = {
     companyLabel: "Nombre de la empresa",
     companyPlaceholder: "Acme Payments",
     submitBusy: "Creando sandbox…",
-    submit: "Crear sandbox gratis",
+    submit: "Crear tenant",
     footnote:
       "Un sandbox por correo. El tenant y todos sus datos se eliminan automáticamente a los 14 días.",
     errEmailTaken: "Ese correo ya creó un tenant sandbox.",
@@ -322,7 +241,6 @@ const en: typeof es = {
       "Double-entry ledger as a service: idempotency, holds, reconciliation, signed webhooks, and multi-tenant isolation with RLS.",
   },
   nav: {
-    blog: "Blog",
     docs: "Docs",
     quickstart: "Quickstart",
     login: "Sign in",
@@ -434,59 +352,13 @@ const en: typeof es = {
     "Cross-tenant leak tests in CI",
     "Money as integers, never floats",
   ],
-  pricing: {
-    title: "What it costs",
-    subtitle:
-      "You pay per posted transaction. Accounts, balance reads and webhook deliveries aren't metered: charging per account would penalise you for modelling your money properly.",
-    tiers: [
-      {
-        name: "Sandbox",
-        price: "Free",
-        included: "Full API, no card",
-        overage: "No expiry date",
-      },
-      {
-        name: "Starter",
-        price: "USD 400/mo",
-        included: "25,000 transactions included",
-        overage: "Then USD 0.015 per transaction",
-      },
-      {
-        name: "Growth",
-        price: "USD 1,200/mo",
-        included: "150,000 transactions included",
-        overage: "Then USD 0.008 per transaction",
-      },
-      {
-        name: "Scale · from",
-        price: "USD 2,500/mo",
-        included: "500,000 transactions included",
-        overage: "Then USD 0.004 per transaction",
-      },
-    ],
-    notes: [
-      "Reversals aren't charged. Reversing is correcting, and charging for corrections pushes people not to correct.",
-      "We're early and working closely with our first teams. If your case doesn't fit a tier, let's talk.",
-    ],
-  },
   finalCta: {
     title: "Stop rebuilding the ledger. Build it once, and build it right.",
     subtitle:
-      "We're in discovery and working closely with our first teams. Try the sandbox and tell us what moves your money.",
+      "Open source and early-stage. Clone it, run it locally, and read the code before you trust it with anything.",
   },
   footer: {
     tagline: "LedgerCore — financial infrastructure",
-  },
-  blog: {
-    metaTitle: "Blog · LedgerCore",
-    title: "Blog",
-    subtitle:
-      "Notes from building a double-entry ledger as a service. One post, one technical idea.",
-    readPost: "Read the post",
-    backToBlog: "Back to the blog",
-    minRead: "min read",
-    viewSingular: "read",
-    viewPlural: "reads",
   },
   comments: {
     title: "Comments",
@@ -507,36 +379,6 @@ const en: typeof es = {
     errUnavailable: "Comments are unavailable right now.",
     errInvalid: "Check the name and the comment text.",
     errNetwork: "Could not send. Check your connection.",
-  },
-  moderation: {
-    metaTitle: "Comment moderation · LedgerCore",
-    title: "Comment moderation",
-    subtitle:
-      "Every blog comment, hidden ones included. Hiding a root comment also hides its replies; restoring it does not bring them back one by one.",
-    tokenLabel: "Moderation token",
-    tokenPlaceholder: "Paste the BLOG_ADMIN_TOKEN",
-    tokenHint:
-      "Kept in this tab only (sessionStorage) and sent in the Authorization header.",
-    enter: "Enter",
-    signOut: "Sign out",
-    errUnauthorized: "Invalid token.",
-    errNotConfigured:
-      "Moderation is not configured: BLOG_ADMIN_TOKEN is missing on the server.",
-    errUnavailable: "Could not reach the database.",
-    empty: "No comments yet.",
-    filterAll: "All",
-    filterVisible: "Visible",
-    filterHidden: "Hidden",
-    statusVisible: "Visible",
-    statusHidden: "Hidden",
-    hide: "Hide",
-    restore: "Restore",
-    remove: "Delete",
-    confirmRemove:
-      "This permanently deletes it, along with its replies. Continue?",
-    replyTo: "replying to",
-    openPost: "Open the post",
-    total: "comments",
   },
   login: {
     tagline: "Operations console · double-entry ledger as a service",

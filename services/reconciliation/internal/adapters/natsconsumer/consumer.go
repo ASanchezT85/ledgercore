@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ledgercore/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/domain"
 )
 
 // DurableName identifies the JetStream durable consumer, so redeploys resume

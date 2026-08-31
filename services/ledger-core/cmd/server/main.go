@@ -15,15 +15,15 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/libs/go/obs"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/obs"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/http"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/natsconsumer"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/outbox"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/postgres"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/adapters/http"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/adapters/natsconsumer"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/adapters/outbox"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/adapters/postgres"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/app"
 )
 
 const (

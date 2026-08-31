@@ -7,11 +7,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/app"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/domain"
 )
 
 // txAt builds a posted deposit transaction with an explicit effective_at.
@@ -193,10 +193,10 @@ func TestProviderAccountBalances(t *testing.T) {
 		}
 		return a
 	}
-	thunesUSD := mk("assets:provider:thunes:usd", domain.AccountAsset, domain.NormalDebit, nil)
-	thunesMXN := mk("assets:provider:thunes:mxn", domain.AccountAsset, domain.NormalDebit, nil)
-	dlocal := mk("liabilities:payables:dlocal", domain.AccountLiability, domain.NormalCredit,
-		map[string]string{"provider": "dlocal"})
+	acmepayUSD := mk("assets:provider:acmepay:usd", domain.AccountAsset, domain.NormalDebit, nil)
+	acmepayMXN := mk("assets:provider:acmepay:mxn", domain.AccountAsset, domain.NormalDebit, nil)
+	nordpay := mk("liabilities:payables:nordpay", domain.AccountLiability, domain.NormalCredit,
+		map[string]string{"provider": "nordpay"})
 
 	post := func(key string, from, to uuid.UUID, asset string, units int64) {
 		tx := domain.Transaction{
@@ -214,10 +214,10 @@ func TestProviderAccountBalances(t *testing.T) {
 			t.Fatalf("post %s: %v", key, err)
 		}
 	}
-	// Fund thunes USD 5000 and MXN 30000; accrue a 1200 USD payable to dlocal.
-	post("pp-1", thunesUSD.ID, f.wallet.ID, "USD", 5000)
-	post("pp-2", thunesMXN.ID, f.wallet.ID, "MXN", 30000)
-	post("pp-3", f.cash.ID, dlocal.ID, "USD", 1200)
+	// Fund acmepay USD 5000 and MXN 30000; accrue a 1200 USD payable to nordpay.
+	post("pp-1", acmepayUSD.ID, f.wallet.ID, "USD", 5000)
+	post("pp-2", acmepayMXN.ID, f.wallet.ID, "MXN", 30000)
+	post("pp-3", f.cash.ID, nordpay.ID, "USD", 1200)
 
 	rows, err := s.ProviderAccountBalances(ctx, f.tenantID)
 	if err != nil {
@@ -234,14 +234,14 @@ func TestProviderAccountBalances(t *testing.T) {
 		}
 		nets[key{provider, r.Asset}] += r.PostedDebits - r.PostedCredits
 	}
-	if got := nets[key{"thunes", "USD"}]; got != 5000 {
-		t.Errorf("thunes USD = %d, want 5000 (they_owe_us)", got)
+	if got := nets[key{"acmepay", "USD"}]; got != 5000 {
+		t.Errorf("acmepay USD = %d, want 5000 (they_owe_us)", got)
 	}
-	if got := nets[key{"thunes", "MXN"}]; got != 30000 {
-		t.Errorf("thunes MXN = %d, want 30000", got)
+	if got := nets[key{"acmepay", "MXN"}]; got != 30000 {
+		t.Errorf("acmepay MXN = %d, want 30000", got)
 	}
-	if got := nets[key{"dlocal", "USD"}]; got != -1200 {
-		t.Errorf("dlocal USD = %d, want -1200 (we_owe_them)", got)
+	if got := nets[key{"nordpay", "USD"}]; got != -1200 {
+		t.Errorf("nordpay USD = %d, want -1200 (we_owe_them)", got)
 	}
 	if len(nets) != 3 {
 		t.Errorf("provider/asset pairs = %d, want 3 (accounts without convention excluded)", len(nets))

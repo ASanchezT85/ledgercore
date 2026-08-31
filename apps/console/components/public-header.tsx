@@ -5,7 +5,7 @@ import { BrandLockup } from "@/components/logo";
 import { LangToggle, useLang } from "@/components/language";
 
 /**
- * Cabecera compartida de las páginas públicas (landing, blog, login, signup).
+ * Cabecera compartida de las páginas públicas (landing, login, signup).
  * Garantiza que desde cualquiera de ellas se pueda volver al inicio y cambiar
  * de idioma — no asumimos que quien llega lee español.
  */
@@ -37,9 +37,6 @@ export function PublicHeader({
             {t.nav.home}
           </Link>
         )}
-        <Link href="/blog" className={linkClass}>
-          {t.nav.blog}
-        </Link>
         <Link href="/docs" className={linkClass}>
           {t.nav.docs}
         </Link>

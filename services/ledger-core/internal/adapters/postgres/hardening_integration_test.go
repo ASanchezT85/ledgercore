@@ -20,14 +20,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ledgercore/ledgercore/libs/go/money"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/adapters/natsconsumer"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/app"
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/adapters/natsconsumer"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/domain"
 )
 
 // ---- LC-001: DB-enforced double-entry ---------------------------------------
@@ -93,6 +94,72 @@ func TestDoubleEntryConstraintRejectsUnbalancedDirectSQL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("balanced direct insert must commit, got: %v", err)
 	}
+}
+
+// TestBalanceGuardIsSearchPathIndependent pins the fix from migration 0009.
+//
+// The guard functions used to resolve `transactions` / `postings` and
+// `check_transaction_balance` through the CALLER's search_path. From a session
+// that did not have `ledger` on its path — a psql session, a restore, a
+// maintenance script — the COMMIT failed with
+// `function check_transaction_balance(uuid) does not exist` instead of running
+// the balance check, and a caller able to create objects earlier on the path
+// could have had the guard validate the wrong tables.
+//
+// TestDoubleEntryConstraintRejectsUnbalancedDirectSQL cannot catch this: it
+// runs as the runtime role, whose search_path already contains `ledger`. This
+// test forces the opposite condition and asserts the guard still reports the
+// real domain violation.
+func TestBalanceGuardIsSearchPathIndependent(t *testing.T) {
+	s, pool := newTestStore(t)
+	f := newFixture(t, s)
+	ctx := context.Background()
+
+	err := pgxutil.WithTenantTx(ctx, pool, f.tenantID, func(tx pgx.Tx) error {
+		// Take `ledger` off the path for this transaction. Every statement
+		// below is schema-qualified, so only the guard's own resolution is
+		// under test.
+		if _, err := tx.Exec(ctx, `SET LOCAL search_path = pg_catalog`); err != nil {
+			return err
+		}
+		txID := uuid.New()
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO ledger.transactions (id, tenant_id, ledger_id, idempotency_key, status, effective_at, created_at)
+			VALUES ($1, $2, $3, $4, 'posted', now(), now())`,
+			txID, f.tenantID, f.ledger.ID, "searchpath-unbalanced-"+uuid.NewString()); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO ledger.postings (id, tenant_id, transaction_id, account_id, direction, asset, amount, created_at)
+			VALUES ($1, $2, $3, $4, 'DEBIT', 'USD', 100, now())`,
+			uuid.New(), f.tenantID, txID, f.cash.ID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO ledger.postings (id, tenant_id, transaction_id, account_id, direction, asset, amount, created_at)
+			VALUES ($1, $2, $3, $4, 'CREDIT', 'USD', 50, now())`,
+			uuid.New(), f.tenantID, txID, f.wallet.ID); err != nil {
+			return err
+		}
+		return nil // COMMIT — the deferred guard fires here.
+	})
+	if err == nil {
+		t.Fatal("unbalanced COMMIT must be rejected regardless of the caller's search_path")
+	}
+
+	// The point of the test: it must fail for the RIGHT reason. An
+	// undefined_function (42883) here means the guard never ran the check.
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		t.Fatalf("expected a PostgreSQL error, got %T: %v", err, err)
+	}
+	if pgErr.Code == "42883" {
+		t.Fatalf("guard did not resolve its own function (search_path leak): %v", pgErr)
+	}
+	if pgErr.Code != "23514" { // check_violation, raised by check_transaction_balance
+		t.Fatalf("expected check_violation (23514) from the balance guard, got %s: %v", pgErr.Code, pgErr)
+	}
+	t.Logf("balance guard reported the real violation with ledger off the path: %s", pgErr.Message)
 }
 
 // ---- LC-006: idempotency fingerprint ----------------------------------------

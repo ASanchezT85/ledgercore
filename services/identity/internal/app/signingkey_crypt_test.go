@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
-	"github.com/ledgercore/ledgercore/services/identity/internal/keycrypt"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/keycrypt"
 )
 
 const testMasterKey = "3f8a2c1d9e4b7a6053c2e1f0b9d8a7c6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0"

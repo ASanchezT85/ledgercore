@@ -16,14 +16,14 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/libs/go/obs"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
-	httpadapter "github.com/ledgercore/ledgercore/services/identity/internal/adapters/http"
-	"github.com/ledgercore/ledgercore/services/identity/internal/adapters/outbox"
-	"github.com/ledgercore/ledgercore/services/identity/internal/adapters/postgres"
-	"github.com/ledgercore/ledgercore/services/identity/internal/app"
-	"github.com/ledgercore/ledgercore/services/identity/internal/keycrypt"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/obs"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
+	httpadapter "github.com/ASanchezT85/ledgercore/services/identity/internal/adapters/http"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/adapters/outbox"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/adapters/postgres"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/keycrypt"
 )
 
 const (
@@ -170,12 +170,26 @@ func run() error {
 
 	svc := app.NewService(store, store, store, issuer)
 
-	// Sandbox self-service: public signup endpoint + TTL sweeper. The
-	// sweeper writes identity.tenant.expired envelopes to the outbox; the
-	// poller drains them to NATS (when configured) so downstream services
-	// purge their schemas.
-	sandbox := app.NewSandboxService(store, cfg.signupsPerDay)
-	go sandbox.RunSweeper(ctx, cfg.sweepInterval)
+	// Sandbox self-service: an UNAUTHENTICATED public signup endpoint plus a
+	// TTL sweeper that HARD-DELETES each tenant it created 14 days later,
+	// propagating the purge to the other services over NATS.
+	//
+	// Both are opt-in, and deliberately so. They exist to run a throwaway
+	// public trial, and either one is destructive or dangerous in a normal
+	// self-hosted deployment: the endpoint lets anyone on the network create a
+	// tenant, and the sweeper deletes ledger data on a timer. A self-hosted
+	// install creates tenants through identity's admin API instead.
+	//
+	// LEDGERCORE_ENV=sandbox-public is the only thing that turns them on, and
+	// that value already forces a strong admin token, real auth and a master
+	// key (see requireHardenedSandbox above).
+	var sandbox *app.SandboxService
+	if cfg.env == "sandbox-public" {
+		sandbox = app.NewSandboxService(store, cfg.signupsPerDay)
+		go sandbox.RunSweeper(ctx, cfg.sweepInterval)
+		slog.Warn("public sandbox mode: unauthenticated signups are enabled and tenants expire",
+			"ttl", app.SandboxTTL, "sweep_interval", cfg.sweepInterval)
+	}
 
 	if cfg.natsURL != "" {
 		nc, err := nats.Connect(cfg.natsURL,
@@ -196,9 +210,18 @@ func run() error {
 		slog.Info("LEDGERCORE_NATS_URL is empty; identity outbox poller disabled, expiry events stay in the outbox table")
 	}
 
+	// WithSandbox only when the service actually exists. Passing a nil
+	// *app.SandboxService through the interface parameter would produce a
+	// non-nil interface holding a nil pointer, and the server's `!= nil`
+	// check would register the endpoint and then panic on the first request.
+	api := httpadapter.New(svc, pool, cfg.adminToken)
+	if sandbox != nil {
+		api = api.WithSandbox(sandbox)
+	}
+
 	server := &http.Server{
 		Addr:              cfg.httpAddr,
-		Handler:           httpadapter.New(svc, pool, cfg.adminToken).WithSandbox(sandbox).Handler(),
+		Handler:           api.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

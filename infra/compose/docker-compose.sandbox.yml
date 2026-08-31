@@ -20,9 +20,6 @@
 #     LEDGERCORE_IDENTITY_RT_PASSWORD
 #     LEDGERCORE_RECON_RT_PASSWORD
 #     LEDGERCORE_WEBHOOKS_RT_PASSWORD
-#     LEDGERCORE_BLOG_RT_PASSWORD
-#   LEDGERCORE_BLOG_HASH_SALT   random salt for blog visitor/author hashes
-#   LEDGERCORE_BLOG_ADMIN_TOKEN operator secret for the /moderation panel
 #
 # Hardening baked in (services refuse to start otherwise):
 #   - LEDGERCORE_ENV=sandbox-public in every Go service
@@ -45,7 +42,6 @@ services:
       LEDGERCORE_IDENTITY_RT_PASSWORD: "${LEDGERCORE_IDENTITY_RT_PASSWORD:?set a random identity runtime password}"
       LEDGERCORE_RECON_RT_PASSWORD: "${LEDGERCORE_RECON_RT_PASSWORD:?set a random recon runtime password}"
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: "${LEDGERCORE_WEBHOOKS_RT_PASSWORD:?set a random webhooks runtime password}"
-      LEDGERCORE_BLOG_RT_PASSWORD: "${LEDGERCORE_BLOG_RT_PASSWORD:?set a random blog runtime password}"
     ports: !override []
 
   nats:
@@ -109,9 +105,6 @@ services:
       # Server-side fetches go through the internal gateway port; the
       # browser talks to the public domain (same origin, /v1/*).
       NEXT_PUBLIC_API_URL: "https://${LEDGERCORE_DOMAIN:?set the public domain}"
-      BLOG_DATABASE_URL: "postgres://ledgercore_blog_rt:${LEDGERCORE_BLOG_RT_PASSWORD:?set a random blog runtime password}@postgres:5432/ledgercore?sslmode=disable"
-      BLOG_HASH_SALT: "${LEDGERCORE_BLOG_HASH_SALT:?set a random blog hash salt (openssl rand -hex 32)}"
-      BLOG_ADMIN_TOKEN: "${LEDGERCORE_BLOG_ADMIN_TOKEN:?set a random blog moderation token (openssl rand -hex 32)}"
     ports: !override []
 
 volumes:

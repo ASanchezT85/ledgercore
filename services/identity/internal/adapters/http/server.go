@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/services/identity/internal/app"
-	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/domain"
 )
 
 // IdentityService is the port this adapter drives; *app.Service implements it.

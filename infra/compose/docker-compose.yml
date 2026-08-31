@@ -35,9 +35,8 @@ services:
       LEDGERCORE_IDENTITY_RT_PASSWORD: "${LEDGERCORE_IDENTITY_RT_PASSWORD:-ledgercore_identity_rt_dev}"
       LEDGERCORE_RECON_RT_PASSWORD: "${LEDGERCORE_RECON_RT_PASSWORD:-ledgercore_recon_rt_dev}"
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: "${LEDGERCORE_WEBHOOKS_RT_PASSWORD:-ledgercore_webhooks_rt_dev}"
-      LEDGERCORE_BLOG_RT_PASSWORD: "${LEDGERCORE_BLOG_RT_PASSWORD:-ledgercore_blog_rt_dev}"
     ports:
-      - "5432:5432"
+      - "${LEDGERCORE_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../postgres/init:/docker-entrypoint-initdb.d:ro
@@ -75,7 +74,6 @@ services:
         goose -dir /repo/services/identity/internal/adapters/postgres/migrations       postgres "$$MIGRATOR_DSN&search_path=identity" up
         goose -dir /repo/services/reconciliation/internal/adapters/postgres/migrations postgres "$$MIGRATOR_DSN&search_path=recon"    up
         goose -dir /repo/services/webhooks/internal/adapters/postgres/migrations       postgres "$$MIGRATOR_DSN&search_path=webhooks" up
-        goose -dir /repo/apps/console/migrations                                      postgres "$$MIGRATOR_DSN&search_path=blog"     up
         psql "$$MIGRATOR_DSN" -v ON_ERROR_STOP=1 -f /repo/infra/postgres/migrate/grants.sql
     restart: "no"
     depends_on:
@@ -86,9 +84,6 @@ services:
     image: nats:2.10-alpine
     # -js enables JetStream, -m 8222 enables the HTTP monitoring endpoint.
     command: ["-js", "-m", "8222"]
-    ports:
-      - "4222:4222"
-      - "8222:8222"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8222/healthz || exit 1"]
       interval: 5s
@@ -110,8 +105,8 @@ services:
       - "--api.dashboard=true"
       - "--api.insecure=true"
     ports:
-      - "8080:8080" # API gateway
-      - "8090:8090" # Traefik dashboard (dev only)
+      - "${LEDGERCORE_GATEWAY_PORT:-8080}:8080" # API gateway
+      - "${LEDGERCORE_TRAEFIK_DASHBOARD_PORT:-8090}:8090" # Traefik dashboard (dev only)
     volumes:
       - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
     depends_on:
@@ -144,7 +139,7 @@ services:
       # LEDGERCORE_AUTH_DISABLED=false to exercise real JWT auth via JWKS.
       LEDGERCORE_AUTH_DISABLED: "${LEDGERCORE_AUTH_DISABLED:-true}"
     ports:
-      - "8081:8081"
+      - "${LEDGERCORE_LEDGER_PORT:-8081}:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,7 +173,7 @@ services:
       # keeps decrypting. NEVER reuse this value outside local dev.
       LEDGERCORE_MASTER_KEY: "${LEDGERCORE_MASTER_KEY:-6465762d6f6e6c792d6d61737465722d6b65792d33322d62797465732d646576}"
     ports:
-      - "8082:8082"
+      - "${LEDGERCORE_IDENTITY_PORT:-8082}:8082"
     depends_on:
       postgres:
         condition: service_healthy
@@ -206,7 +201,7 @@ services:
       LEDGERCORE_AUTO_MIGRATE: "false"
       LEDGERCORE_AUTH_DISABLED: "true"
     ports:
-      - "8083:8083"
+      - "${LEDGERCORE_RECON_PORT:-8083}:8083"
     depends_on:
       postgres:
         condition: service_healthy
@@ -238,7 +233,7 @@ services:
       # as identity; dev default here, REQUIRED in the sandbox overlay.
       LEDGERCORE_MASTER_KEY: "${LEDGERCORE_MASTER_KEY:-6465762d6f6e6c792d6d61737465722d6b65792d33322d62797465732d646576}"
     ports:
-      - "8084:8084"
+      - "${LEDGERCORE_WEBHOOKS_PORT:-8084}:8084"
     depends_on:
       postgres:
         condition: service_healthy
@@ -266,16 +261,12 @@ services:
       # Read server-side at request time (pages are force-dynamic); inside the
       # compose network the gateway is reachable by service name.
       NEXT_PUBLIC_API_URL: "http://gateway:8080"
-      # Public content only (blog views + comments). This role has NO privilege
       # on the money schemas — see infra/postgres/init/01-init.sql step 6.
-      BLOG_DATABASE_URL: "postgres://ledgercore_blog_rt:${LEDGERCORE_BLOG_RT_PASSWORD:-ledgercore_blog_rt_dev}@postgres:5432/ledgercore?sslmode=disable"
       # Salt for the visitor/author hashes: we never store a raw IP.
-      BLOG_HASH_SALT: "${LEDGERCORE_BLOG_HASH_SALT:-ledgercore_blog_salt_dev}"
       # Operator secret for /moderation. Unset => the panel answers 503 and
       # nobody can moderate; it is never the tenant API key.
-      BLOG_ADMIN_TOKEN: "${LEDGERCORE_BLOG_ADMIN_TOKEN:-ledgercore_blog_admin_dev}"
     ports:
-      - "3000:3000"
+      - "${LEDGERCORE_CONSOLE_PORT:-3000}:3000"
     profiles: ["web"]
     depends_on:
       - gateway

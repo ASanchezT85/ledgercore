@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/signature"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/signature"
 )
 
 // fakeStore records the outcome writes performed by the dispatcher.

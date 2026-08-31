@@ -4,7 +4,7 @@ Motor transaccional de doble entrada de LedgerCore. Es la fuente de verdad
 contable: libros (ledgers), cuentas, transacciones balanceadas, holds
 (autorizaciones en dos fases), balances por activo y balanza de comprobación.
 
-- **Módulo:** `github.com/ledgercore/ledgercore/services/ledger-core`
+- **Módulo:** `github.com/ASanchezT85/ledgercore/services/ledger-core`
 - **Puerto:** `8081`
 - **Schema Postgres:** `ledger` (jamás toca otros schemas)
 - **Contrato API:** `contracts/openapi/ledger.v1.yaml`

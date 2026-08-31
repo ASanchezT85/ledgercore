@@ -12,9 +12,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/app"
-	"github.com/ledgercore/ledgercore/services/webhooks/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/webhooks/internal/domain"
 )
 
 // testPool skips the test unless LEDGERCORE_TEST_DATABASE_URL is set, per

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 )
 
 // DefaultCSVExponent is the fallback decimal exponent for assets not covered

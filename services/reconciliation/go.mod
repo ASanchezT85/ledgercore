@@ -1,17 +1,17 @@
-module github.com/ledgercore/ledgercore/services/reconciliation
+module github.com/ASanchezT85/ledgercore/services/reconciliation
 
 go 1.26
 
 require (
+	github.com/ASanchezT85/ledgercore/libs/go v0.0.0
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.5
-	github.com/ledgercore/ledgercore/libs/go v0.0.0
 	github.com/nats-io/nats.go v1.42.0
 	github.com/pressly/goose/v3 v3.26.0
 )
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -27,4 +27,4 @@ require (
 	golang.org/x/text v0.27.0 // indirect
 )
 
-replace github.com/ledgercore/ledgercore/libs/go => ../../libs/go
+replace github.com/ASanchezT85/ledgercore/libs/go => ../../libs/go

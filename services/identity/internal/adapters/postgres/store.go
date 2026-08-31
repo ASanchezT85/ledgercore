@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/domain"
 )
 
 // uniqueViolation is the PostgreSQL SQLSTATE for unique constraint errors.

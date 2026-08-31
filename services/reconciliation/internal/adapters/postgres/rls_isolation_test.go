@@ -18,10 +18,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/app"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/app"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/domain"
 )
 
 func TestReconRLSCrossTenantIsolation(t *testing.T) {

@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 
-	"github.com/ledgercore/ledgercore/services/ledger-core/internal/domain"
+	"github.com/ASanchezT85/ledgercore/services/ledger-core/internal/domain"
 )
 
 // Wire representations following contracts/openapi/ledger.v1.yaml: amounts

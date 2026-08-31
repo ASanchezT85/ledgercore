@@ -39,7 +39,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
 )
 
 // roleModelProvisioned is true once TestMain has stood up the real role model,

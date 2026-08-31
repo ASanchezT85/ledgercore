@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 )
 
 // ---- Enumerations -----------------------------------------------------------
@@ -295,8 +295,8 @@ type ProviderPosition struct {
 // ProviderOf extracts the counterparty name of an account. metadata.provider
 // wins as an explicit override; otherwise the account path must follow the
 // convention <type>:provider:<name>:... (":" or "/" both accepted as
-// separators, e.g. "assets:provider:thunes:usd" or
-// "liabilities/provider/dlocal/mxn"). The bool reports whether the account
+// separators, e.g. "assets:provider:acmepay:usd" or
+// "liabilities/provider/nordpay/mxn"). The bool reports whether the account
 // identifies a provider at all.
 func ProviderOf(path string, metadata map[string]string) (string, bool) {
 	if p := strings.TrimSpace(metadata["provider"]); p != "" {

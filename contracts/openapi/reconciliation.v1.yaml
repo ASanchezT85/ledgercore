@@ -12,8 +12,6 @@ info:
     All routes live under the `/v1/reconciliation` prefix (the gateway routes
     that prefix to this service). The tenant is derived from the JWT.
 servers:
-  - url: https://api.ledgercore.sanchezavila.com
-    description: Production (via gateway)
   - url: http://localhost:8083
     description: Local development (direct)
   - url: http://localhost:8080

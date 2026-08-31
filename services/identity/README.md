@@ -5,7 +5,7 @@ sistema), el ciclo de vida de las API keys y la emisión de JWT EdDSA de corta
 vida, publicando sus claves públicas vía JWKS para que el resto de los
 servicios validen tokens con `libs/go/ident.RequireAuth`.
 
-- **Módulo:** `github.com/ledgercore/ledgercore/services/identity`
+- **Módulo:** `github.com/ASanchezT85/ledgercore/services/identity`
 - **Puerto:** `8082`
 - **Schema Postgres:** `identity` (el pool fija `search_path=identity`)
 - **Arquitectura:** hexagonal — `cmd/server`, `internal/domain`, `internal/app`,

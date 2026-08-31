@@ -24,8 +24,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
-	"github.com/ledgercore/ledgercore/services/identity/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/services/identity/internal/domain"
 )
 
 func TestAPIKeyRLSCrossTenantIsolation(t *testing.T) {

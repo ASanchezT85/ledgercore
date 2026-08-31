@@ -16,8 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 
-	"github.com/ledgercore/ledgercore/libs/go/events"
-	"github.com/ledgercore/ledgercore/libs/go/pgxutil"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/pgxutil"
 )
 
 // Durable identifies this service's purge consumer on the LEDGERCORE stream.

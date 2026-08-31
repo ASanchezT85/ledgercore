@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ledgercore/ledgercore/libs/go/money"
+	"github.com/ASanchezT85/ledgercore/libs/go/money"
 )
 
 func p(dir Direction, asset string, units int64) Posting {
@@ -392,15 +392,15 @@ func TestProviderOf(t *testing.T) {
 		want     string
 		ok       bool
 	}{
-		{"colon convention", "assets:provider:thunes:usd", nil, "thunes", true},
-		{"slash convention", "liabilities/provider/dlocal/mxn", nil, "dlocal", true},
+		{"colon convention", "assets:provider:acmepay:usd", nil, "acmepay", true},
+		{"slash convention", "liabilities/provider/nordpay/mxn", nil, "nordpay", true},
 		{"mixed separators", "assets:provider/uniteller:usd", nil, "uniteller", true},
-		{"metadata override wins", "assets:cash", map[string]string{"provider": "Thunes"}, "thunes", true},
-		{"metadata on conventional path wins", "assets:provider:thunes:usd", map[string]string{"provider": "other"}, "other", true},
+		{"metadata override wins", "assets:cash", map[string]string{"provider": "AcmePay"}, "acmepay", true},
+		{"metadata on conventional path wins", "assets:provider:acmepay:usd", map[string]string{"provider": "other"}, "other", true},
 		{"no convention", "customer:c1:wallet", nil, "", false},
 		{"provider segment last, no name", "assets:provider", nil, "", false},
 		{"empty path", "", nil, "", false},
-		{"case-insensitive segment", "Assets:Provider:Thunes", nil, "thunes", true},
+		{"case-insensitive segment", "Assets:Provider:AcmePay", nil, "acmepay", true},
 		{"whitespace-only metadata ignored", "assets:cash", map[string]string{"provider": "  "}, "", false},
 	}
 	for _, c := range cases {

@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ledgercore/ledgercore/libs/go/events"
+	"github.com/ASanchezT85/ledgercore/libs/go/events"
 
-	"github.com/ledgercore/ledgercore/libs/go/httpx"
-	"github.com/ledgercore/ledgercore/services/reconciliation/internal/domain"
+	"github.com/ASanchezT85/ledgercore/libs/go/httpx"
+	"github.com/ASanchezT85/ledgercore/services/reconciliation/internal/domain"
 )
 
 // ErrValidation marks client errors (HTTP 400). Wrap it with %w.

@@ -4,7 +4,7 @@ Despachador de webhooks firmados de LedgerCore: consume los eventos de la
 plataforma desde NATS JetStream y los entrega, con firma HMAC verificable,
 a los endpoints registrados por cada tenant.
 
-- **Módulo:** `github.com/ledgercore/ledgercore/services/webhooks`
+- **Módulo:** `github.com/ASanchezT85/ledgercore/services/webhooks`
 - **Puerto:** `8084`
 - **Schema Postgres:** `webhooks` (search_path fijado; RLS por `tenant_id`)
 - **Consume:** `ledger.>` y `recon.>` (stream `LEDGERCORE`, consumers durables

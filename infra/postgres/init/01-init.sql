@@ -63,7 +63,6 @@
 \getenv identity_pw   LEDGERCORE_IDENTITY_RT_PASSWORD
 \getenv recon_pw      LEDGERCORE_RECON_RT_PASSWORD
 \getenv webhooks_pw   LEDGERCORE_WEBHOOKS_RT_PASSWORD
-\getenv blog_pw       LEDGERCORE_BLOG_RT_PASSWORD
 
 -- ---------------------------------------------------------------------------
 -- 1. Migrator / owner role (DDL only, never runtime).
@@ -116,15 +115,6 @@ CREATE ROLE ledgercore_webhooks_rt
     LOGIN PASSWORD :'webhooks_pw'
     NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
--- The console owns the PUBLIC-CONTENT schema (`blog`): post view counters and
--- reader comments. It is the only runtime role reachable from an unauthenticated
--- write path (anyone on the internet can post a comment), so it is deliberately
--- confined to `blog` and holds NO privilege whatsoever on the money schemas —
--- see the explicit REVOKE in step 6. No money data is readable through it.
-CREATE ROLE ledgercore_blog_rt
-    LOGIN PASSWORD :'blog_pw'
-    NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-
 -- ---------------------------------------------------------------------------
 -- 4. One schema per service, all OWNED BY THE MIGRATOR. Services never own a
 --    schema, so a runtime role cannot run DDL even against its own schema.
@@ -141,7 +131,6 @@ CREATE SCHEMA ledger   AUTHORIZATION ledgercore_migrator;
 CREATE SCHEMA identity AUTHORIZATION ledgercore_migrator;
 CREATE SCHEMA recon    AUTHORIZATION ledgercore_migrator;
 CREATE SCHEMA webhooks AUTHORIZATION ledgercore_migrator;
-CREATE SCHEMA blog     AUTHORIZATION ledgercore_migrator;
 
 -- ---------------------------------------------------------------------------
 -- 5. Runtime grants. Each runtime role gets:
@@ -195,32 +184,18 @@ ALTER DEFAULT PRIVILEGES FOR ROLE ledgercore_migrator IN SCHEMA webhooks
 ALTER DEFAULT PRIVILEGES FOR ROLE ledgercore_migrator IN SCHEMA webhooks
     GRANT USAGE, SELECT ON SEQUENCES TO ledgercore_webhooks_rt;
 
--- blog -> ledgercore_blog_rt
-GRANT USAGE ON SCHEMA blog TO ledgercore_blog_rt;
-GRANT SELECT, INSERT, UPDATE, DELETE
-    ON ALL TABLES IN SCHEMA blog TO ledgercore_blog_rt;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA blog TO ledgercore_blog_rt;
-ALTER DEFAULT PRIVILEGES FOR ROLE ledgercore_migrator IN SCHEMA blog
-    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ledgercore_blog_rt;
-ALTER DEFAULT PRIVILEGES FOR ROLE ledgercore_migrator IN SCHEMA blog
-    GRANT USAGE, SELECT ON SEQUENCES TO ledgercore_blog_rt;
-
 -- ---------------------------------------------------------------------------
 -- 6. Explicit cross-schema REVOKE. Defence in depth: even if a future migration
 --    or a superuser accidentally widens PUBLIC, no runtime role can touch a
 --    schema that is not its own. (PUBLIC never had CREATE on these schemas
 --    because they are owned by the migrator, but we revoke to be explicit.)
 -- ---------------------------------------------------------------------------
-REVOKE ALL ON SCHEMA ledger, identity, recon, webhooks, blog FROM PUBLIC;
+REVOKE ALL ON SCHEMA ledger, identity, recon, webhooks FROM PUBLIC;
 
-REVOKE ALL ON SCHEMA identity, recon, webhooks, blog FROM ledgercore_ledger_rt;
-REVOKE ALL ON SCHEMA ledger,   recon, webhooks, blog FROM ledgercore_identity_rt;
-REVOKE ALL ON SCHEMA ledger, identity, webhooks, blog FROM ledgercore_recon_rt;
-REVOKE ALL ON SCHEMA ledger, identity, recon,    blog FROM ledgercore_webhooks_rt;
-
--- The blog role is the one exposed to anonymous writes: keep it out of EVERY
--- money schema, explicitly.
-REVOKE ALL ON SCHEMA ledger, identity, recon, webhooks FROM ledgercore_blog_rt;
+REVOKE ALL ON SCHEMA identity, recon, webhooks FROM ledgercore_ledger_rt;
+REVOKE ALL ON SCHEMA ledger,   recon, webhooks FROM ledgercore_identity_rt;
+REVOKE ALL ON SCHEMA ledger, identity, webhooks FROM ledgercore_recon_rt;
+REVOKE ALL ON SCHEMA ledger, identity, recon    FROM ledgercore_webhooks_rt;
 
 -- ---------------------------------------------------------------------------
 -- 7. Maintenance role grants. It must be able to operate on every schema's
