@@ -120,6 +120,14 @@ Seven jobs in `.github/workflows/ci.yml`: `go` (build/vet/test matrix),
 > runner never starting, i.e. an account-level block, not a cost and not a
 > defect in the workflow.
 >
+> The cause was traced to the account's billing state: no debt, no invoices, both
+> subscriptions on the free tier, `$0` metered usage — but a failed authorization
+> hold on the stored payment method, which GitHub treats as an invalid payment
+> method and which disables Actions account-wide, public repositories included.
+> Removing the payment method was tried and did **not** clear it: a fresh run
+> after removal failed identically, fourteen jobs with zero steps. The flag needs
+> resolving with the bank or with GitHub Support, neither of which is a cost.
+>
 > Leaving it that way would put a permanently red badge on a project whose tests
 > pass, which misinforms a reader more than silence does. So the failed runs were
 > deleted and Actions was switched off for this repository.
