@@ -68,7 +68,10 @@ internal documents, which nobody expected to publish.
   the identifiers, the schema specifics and the financial figure are gone.
   ADR-005 now reads "observed in production systems the team has operated" and
   describes the failure mode, not the company.
-- Verified: `grep -rniE 'REDACTED|REDACTED'` over the entire tree returns nothing.
+- Verified: a case-insensitive search for the company's name and its product's
+  name over the entire tree returns nothing. (The search terms are deliberately
+  not written out here — reproducing them in a public document would defeat the
+  exercise. They are the two names removed in commit `9a51d6a`.)
 
 > ### Remaining action — history rewrite required
 >
