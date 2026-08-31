@@ -109,11 +109,27 @@ Seven jobs in `.github/workflows/ci.yml`: `go` (build/vet/test matrix),
 `pg-integration` (per-service PostgreSQL matrix), `role-separation`, `web`,
 `compose-validate`, `secret-scan`, `contracts`.
 
-> **GitHub Actions has never executed for this repository.** Every run recorded
-> `startup_failure` with zero jobs, because Actions is disabled on the account
-> for billing reasons. The workflow is written and its jobs were verified by hand,
-> but **no commit here has ever been validated by automated CI.** This is the
-> single largest gap in the project's assurance story and the README says so.
+> **GitHub Actions is disabled on this repository, and no commit has ever been
+> validated by automated CI.**
+>
+> The history: while the repository was private, every run recorded
+> `startup_failure` with zero jobs. Publishing it was expected to fix that —
+> Actions is free and unmetered on public repositories — and a run did trigger
+> on the first public push. It failed the same way: fourteen jobs, every one
+> dead in four seconds with zero steps executed. That is the signature of the
+> runner never starting, i.e. an account-level block, not a cost and not a
+> defect in the workflow.
+>
+> Leaving it that way would put a permanently red badge on a project whose tests
+> pass, which misinforms a reader more than silence does. So the failed runs were
+> deleted and Actions was switched off for this repository.
+>
+> **The workflow file stays**, because it is accurate and because it works in a
+> fork: Actions is free on public repositories, so anyone who forks this and
+> pushes gets the full seven-job pipeline on their own account.
+>
+> This remains the single largest gap in the project's assurance story, and the
+> README says so.
 
 `scripts/ci-local.sh` is the substitute: it runs the same gates against a clean
 `git archive` checkout, so the result is evidence about the tree as it would be
@@ -125,9 +141,10 @@ cloned, not about a developer's working directory. It deliberately requires no
 
 Listed so nobody has to discover them by being surprised.
 
-1. **CI has never run.** See above. Until Actions is enabled or an alternative
-   runner is wired up, "green" means "green on a machine", not "green on every
-   commit".
+1. **CI does not run.** See above. "Green" means "green on a machine", not
+   "green on every commit". `scripts/ci-local.sh` is the substitute and runs the
+   same gates from a clean checkout, but nothing runs it automatically.
+   Dependabot is configured and, with Actions off, equally inert.
 2. **Concurrency is covered by a shell script, not by the Go suite.**
    `examples/golden-scenarios.sh` asserts the races, but it needs a running
    stack and nothing runs it automatically. They should also exist as Go tests

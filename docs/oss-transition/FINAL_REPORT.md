@@ -328,11 +328,15 @@ Ordered by how much they should worry a reader.
 
 1. **The git history is not yet purged.** The one blocker. Until then the
    repository must stay private.
-2. **CI has never executed for this repository.** GitHub Actions is disabled on
-   the account for billing; every run recorded `startup_failure` with zero jobs.
-   The workflow is written and every job was verified by hand, but no commit here
-   has been validated automatically. This is the largest gap in the assurance
-   story, and the README says so.
+2. **CI does not run, and Actions is switched off deliberately.** Publishing was
+   expected to fix this — Actions is free and unmetered on public repositories —
+   and a run did trigger on the first public push. All fourteen jobs died in four
+   seconds with zero steps: the runner never started, which is an account-level
+   block rather than a cost or a defect in the workflow. Rather than leave a
+   permanently red badge on a project whose tests pass, the failed runs were
+   deleted and Actions disabled for the repository. The workflow file stays and
+   works in a fork. No commit here has ever been validated automatically; this
+   remains the largest gap in the assurance story.
 3. **No independent security review.** Two external audits covered the earlier
    commercial codebase; nothing has reviewed it as an open-source artefact.
 4. **Key management is not production-grade.** Signing keys and webhook secrets
@@ -391,7 +395,7 @@ Ordered by how much they should worry a reader.
 
 1. **Delete the two DNS A records** (`ledgercore`, `api.ledgercore`) in the
    Namecheap panel. They resolve to a host that no longer serves them.
-2. **Get CI running.** GitHub Actions has never executed for this project; that
-   risk now outranks everything else on this list.
+2. **Get CI running** if the account-level Actions block is ever cleared. Until
+   then `scripts/ci-local.sh` is the gate, and it is run by hand.
 3. Port the concurrency races into the Go suite so they run without a live stack.
 4. Add an SDK end-to-end test against a compose-started instance.

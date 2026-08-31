@@ -272,7 +272,22 @@ superuser DSN and each service provisions its own roles and schema:
 LEDGERCORE_TEST_ADMIN_URL='postgres://postgres:postgres@localhost:5432/ledgercore' make test-go
 ```
 
-`scripts/ci-local.sh` runs the whole gate against a clean `git archive` checkout.
+`scripts/ci-local.sh` runs the whole gate against a clean `git archive`
+checkout. **This is the gate this project actually runs.**
+
+> **GitHub Actions is disabled on this repository.** The workflow in
+> `.github/workflows/ci.yml` is real and complete — seven jobs covering the Go
+> matrix, per-service PostgreSQL integration, database role separation, the
+> console build, compose validation, secret scanning and OpenAPI drift — but it
+> has never executed here, for reasons on the account rather than in the code.
+> Rather than leave a permanently red badge on a repository whose tests pass,
+> Actions is switched off.
+>
+> The file is kept deliberately: **it works in a fork.** Actions is free and
+> unmetered on public repositories, so forking this project and pushing gives
+> you the full pipeline on your own account. Until then, treat `ci-local.sh` and
+> `examples/golden-scenarios.sh` as the evidence, and treat "the tests pass" as
+> a claim verified on a machine rather than on every commit.
 
 To check the guarantees end to end against a running stack — including the
 concurrency races — run the golden scenarios:
@@ -303,8 +318,8 @@ it.
 The honest list of what is unfinished is in
 [`docs/oss-transition/FINAL_REPORT.md`](docs/oss-transition/FINAL_REPORT.md).
 Highlights: no KMS, no HA, no global rate limiting, OpenTelemetry wired but
-no-op, holds have no accounting representation of their own, and CI has never
-actually run on GitHub Actions for this repository.
+no-op, holds have no accounting representation of their own, and **CI does not
+run here** — see [Testing](#testing).
 
 ## License
 

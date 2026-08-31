@@ -97,9 +97,16 @@ project self-hostable, licensed and publishable.
 ### Known limitations
 
 Unchanged by this release and stated plainly in the README: no KMS, no HA, no
-global rate limiting, OpenTelemetry wired but no-op, holds have no accounting
-representation of their own, and GitHub Actions has never executed for this
-repository.
+global rate limiting, OpenTelemetry wired but no-op, and holds have no accounting
+representation of their own.
+
+**GitHub Actions is disabled on this repository.** A run triggered on the first
+public push and all fourteen jobs died in four seconds with zero steps executed —
+an account-level block, not a cost and not a defect in the workflow. The failed
+runs were deleted and Actions switched off rather than leave a permanently red
+badge on a project whose tests pass. The workflow file is kept because it is
+accurate and because it works in a fork. `scripts/ci-local.sh` runs the same
+gates from a clean checkout and is what this project actually uses.
 
 ---
 
