@@ -25,7 +25,7 @@ jobs:
       run:
         working-directory: ${{ matrix.module }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -87,7 +87,7 @@ jobs:
       LEDGERCORE_RECON_RT_PASSWORD: ledgercore_recon_rt_dev
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: ledgercore_webhooks_rt_dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -138,7 +138,7 @@ jobs:
       LEDGERCORE_RECON_RT_PASSWORD: ledgercore_recon_rt_dev
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: ledgercore_webhooks_rt_dev
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Provision roles and schemas (init SQL)
         run: psql "postgres://postgres:postgres@localhost:5432/ledgercore" -v ON_ERROR_STOP=1 -f infra/postgres/init/01-init.sql
@@ -184,7 +184,7 @@ jobs:
       run:
         working-directory: apps/console
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
         with:
@@ -217,7 +217,7 @@ jobs:
       LEDGERCORE_RECON_RT_PASSWORD: ci-dummy-recon
       LEDGERCORE_WEBHOOKS_RT_PASSWORD: ci-dummy-webhooks
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate base compose file
         run: docker compose -f infra/compose/docker-compose.yml config -q
@@ -237,7 +237,7 @@ jobs:
     name: secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: gitleaks
@@ -257,7 +257,7 @@ jobs:
     name: openapi lint + anti-drift
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
