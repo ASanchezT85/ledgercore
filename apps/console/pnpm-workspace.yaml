@@ -11,3 +11,8 @@ allowBuilds:
   # vue-demi (transitive via @scalar/api-reference) has a harmless postinstall
   # switcher; we don't run Vue 2, so the script is not needed.
   vue-demi: false
+
+# next 15.5.x pins postcss 8.4.31 exactly, which has known advisories
+# (GHSA-qx2v-qp2m-jg93 and later). Force a patched release until Next bumps it.
+overrides:
+  postcss: ^8.5.23
