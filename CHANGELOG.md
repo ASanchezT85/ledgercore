@@ -5,7 +5,22 @@ Notable changes to LedgerCore. Dates are ISO-8601.
 The project is **pre-1.0**. Until `1.0.0`, a minor version may contain a
 breaking change; each one is listed here explicitly.
 
-## [Unreleased] — 0.1.0 candidate
+## [Unreleased]
+
+### Security
+
+- **Console: patched React2Shell** (CVE-2025-55182 / CVE-2025-66478, unauthenticated
+  remote code execution through React Server Components) and the follow-up
+  December 2025 advisories (denial of service, Server Function source exposure).
+  `next` 15.5.4 → 15.5.28 and `react` / `react-dom` 19.1.0 → 19.1.10. Every
+  self-hosted console built from 0.1.0 is exposed: rebuild the image
+  (`docker compose --profile web up -d --build`).
+- Console lockfile: `postcss` forced to `^8.5.23` through a pnpm override (Next
+  pins 8.4.31) and `sharp`, `nanoid`, `source-map-js` and `vue` moved to patched
+  releases. `pnpm audit` is down to one low-severity advisory in a dev-only
+  dependency of the bundled API reference (`@ai-sdk/provider-utils`).
+
+## [0.1.0] — 2026-08-31
 
 The first open-source release. LedgerCore was previously a private codebase
 backing a hosted commercial sandbox; this release ends that and makes the
