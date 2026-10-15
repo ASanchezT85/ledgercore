@@ -20,6 +20,15 @@ breaking change; each one is listed here explicitly.
   releases. `pnpm audit` is down to one low-severity advisory in a dev-only
   dependency of the bundled API reference (`@ai-sdk/provider-utils`).
 
+### Fixed
+
+- **The sandbox gateway routed the core ledger API to the console.** In
+  `traefik-dynamic.sandbox.yml` the `ledger-core` router (`/v1`) and the console
+  catch-all both had priority 1, so `/v1/ledgers`, `/v1/accounts` and
+  `/v1/transactions` reached Next.js and answered 404 HTML on a public deploy.
+  `ledger-core` now has priority 50. The dev routing file has no catch-all and
+  was not affected.
+
 ## [0.1.0] — 2026-08-31
 
 The first open-source release. LedgerCore was previously a private codebase
@@ -66,12 +75,6 @@ project self-hostable, licensed and publishable.
   tenant, the other hard-deletes tenants and their ledger data on a timer. They
   now require `LEDGERCORE_ENV=sandbox-public`. Also fixed the nil-pointer-in-an-
   interface trap that would have registered the endpoint anyway.
-- **The sandbox gateway routed the core ledger API to the console.** In
-  `traefik-dynamic.sandbox.yml` the `ledger-core` router (`/v1`) and the console
-  catch-all both had priority 1, so `/v1/ledgers`, `/v1/accounts` and
-  `/v1/transactions` reached Next.js and answered 404 HTML on a public deploy.
-  `ledger-core` now has priority 50. The dev routing file has no catch-all and
-  was not affected.
 - **`docker compose up` failed on any host already using 4222, 5432 or 8080.**
   Ports are overridable and NATS is no longer published to the host.
 - README quickstart referenced a compose path that does not exist
