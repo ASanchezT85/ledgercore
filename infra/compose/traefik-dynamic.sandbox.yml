@@ -52,10 +52,13 @@ http:
       service: webhooks
       tls:
         certResolver: letsencrypt
+    # Must sit strictly between the console catch-all (1) and the specific
+    # prefixes (100): tied with the console, Traefik sent /v1/ledgers,
+    # /v1/accounts and /v1/transactions to Next.js, which answered 404 HTML.
     ledger-core:
       entryPoints: [websecure]
       rule: 'Host(`{{ env "LEDGERCORE_DOMAIN" }}`) && PathPrefix(`/v1`)'
-      priority: 1
+      priority: 50
       middlewares: [ratelimit-global]
       service: ledger-core
       tls:

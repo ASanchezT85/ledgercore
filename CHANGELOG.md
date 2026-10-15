@@ -20,6 +20,15 @@ breaking change; each one is listed here explicitly.
   releases. `pnpm audit` is down to one low-severity advisory in a dev-only
   dependency of the bundled API reference (`@ai-sdk/provider-utils`).
 
+### Fixed
+
+- **The sandbox gateway routed the core ledger API to the console.** In
+  `traefik-dynamic.sandbox.yml` the `ledger-core` router (`/v1`) and the console
+  catch-all both had priority 1, so `/v1/ledgers`, `/v1/accounts` and
+  `/v1/transactions` reached Next.js and answered 404 HTML on a public deploy.
+  `ledger-core` now has priority 50. The dev routing file has no catch-all and
+  was not affected.
+
 ## [0.1.0] — 2026-08-31
 
 The first open-source release. LedgerCore was previously a private codebase
