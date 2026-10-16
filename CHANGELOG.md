@@ -28,6 +28,11 @@ breaking change; each one is listed here explicitly.
   `/v1/transactions` reached Next.js and answered 404 HTML on a public deploy.
   `ledger-core` now has priority 50. The dev routing file has no catch-all and
   was not affected.
+- **"Send" in the API reference (`/docs/api`) targeted localhost on a
+  deployment.** The OpenAPI specs only declare `localhost` servers, so a visitor
+  trying a request reached their own machine. Off localhost, the reference now
+  points requests at the page's own origin; local development keeps the spec
+  servers.
 
 ## [0.1.0] — 2026-08-31
 

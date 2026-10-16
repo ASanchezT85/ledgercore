@@ -42,8 +42,13 @@ export function ApiReferenceView() {
         setError(true);
         return;
       }
+      // The specs only list localhost servers. On a deployment, "Send" must hit
+      // this same host (the gateway serves /v1 next to the console); locally the
+      // console runs on :3000 apart from the gateway, so keep the spec servers.
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
       window.Scalar.createApiReference(containerRef.current, {
         sources: SOURCES,
+        ...(local ? {} : { servers: [{ url: window.location.origin, description: "This deployment" }] }),
         // Self-contained: no font fetch from Scalar's CDN, no request proxy.
         withDefaultFonts: false,
         proxyUrl: "",
